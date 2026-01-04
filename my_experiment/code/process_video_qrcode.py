@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from math import log10, sqrt
 
 ffmpeg_path = "ffmpeg"
-mahimahi_path = ""
+mahimahi_path = "/home/marco/networking/sparkrtc-public/mahimahi"
 fps = 30
 
 def gen_qrcode_pic(num, data_dir):

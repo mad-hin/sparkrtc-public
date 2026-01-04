@@ -82,3 +82,17 @@
 .gclient_*
 *.lib
 *.dll
+
+my_experiment/data/
+
+my_experiment/qrcode/
+
+my_experiment/send/
+
+my_experiment/result/
+
+my_experiment/file/
+
+my_experiment/statistics.csv
+
+my_experiment/statistics.log

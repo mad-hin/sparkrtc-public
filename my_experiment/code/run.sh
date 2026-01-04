@@ -50,7 +50,7 @@ if [ -z "${video_name}" ] || [ -z "${run_program}" ]; then
 fi
 
 if [ $run_program == "gen_send_video" ]; then
-	python3 process_video_qrcode.py --option=gen_send_video --data=$video_name --height=$height --width=$width
+	uv run process_video_qrcode.py --option=gen_send_video --data=$video_name --height=$height --width=$width
 fi
 
 trace_logs_dir="../file/trace_logs"
@@ -67,19 +67,19 @@ do
 			output_dir="${filename}/output_${times}"
 			echo "$output_dir"
 			if [ $run_program == "all" ] || [ $run_program == "send_and_recv" ]; then
-				python3 process_video_qrcode.py --option=send_and_recv --data=$video_name --loss_rate=$lr\
+				uv run process_video_qrcode.py --option=send_and_recv --data=$video_name --loss_rate=$lr\
 				--method_type=$method_type --method_val=$method_val --burst_length=$burst_length --height=$height --width=$width  --output_dir=${output_dir}
 				pid=$!
 				wait $pid
 			fi
 			# send_and_recv contains decode process
 			if [ $run_program == "decode_recv_video" ]; then
-				python3 process_video_qrcode.py --option=decode_recv_video --data=$video_name --height=$height --width=$width  --output_dir=${output_dir}
+				uv run process_video_qrcode.py --option=decode_recv_video --data=$video_name --height=$height --width=$width  --output_dir=${output_dir}
 				pid=$!
 				wait $pid
 			fi
 			if [ $run_program == "all" ] || [ $run_program == "show_fig" ]; then
-				python3 process_video_qrcode.py --option=show_fig --data=$video_name  --output_dir=${output_dir}
+				uv run process_video_qrcode.py --option=show_fig --data=$video_name  --output_dir=${output_dir}
 			fi
 			exit 0
 		done
