@@ -1552,6 +1552,11 @@ void VideoStreamEncoder::OnFrame(Timestamp post_time,
 
   last_captured_timestamp_ = incoming_frame.ntp_time_ms();
 
+  // Log frame capture timestamp for anomaly analysis
+  RTC_LOG(LS_INFO) << "FRAME_CAPTURE, frame_id=" << incoming_frame.timestamp()
+                   << ", capture_time_us=" << post_time.us()
+                   << ", ntp_time_ms=" << incoming_frame.ntp_time_ms();
+
   encoder_stats_observer_->OnIncomingFrame(incoming_frame.width(),
                                            incoming_frame.height());
   ++captured_frame_count_;
@@ -1718,10 +1723,12 @@ void VideoStreamEncoder::SetEncoderRates(
     return;
 
   if (rate_control_changed) {
-    int bitrate_kbps = rate_settings.rate_control.bitrate.GetSpatialLayerSum(0) / 1000;
+    int bitrate_kbps =
+        rate_settings.rate_control.bitrate.GetSpatialLayerSum(0) / 1000;
     RTC_LOG(LS_INFO) << "Send Statistics SetRates, stream 0 target_bitrate "
-                      << bitrate_kbps << " framerate "
-                      << rate_settings.rate_control.framerate_fps << " current time: " << rtc::TimeMillis();
+                     << bitrate_kbps << " framerate "
+                     << rate_settings.rate_control.framerate_fps
+                     << " current time: " << rtc::TimeMillis();
     encoder_->SetRates(rate_settings.rate_control);
 
     encoder_stats_observer_->OnBitrateAllocationUpdated(
@@ -2036,8 +2043,21 @@ void VideoStreamEncoder::EncodeVideoFrame(const VideoFrame& video_frame,
 
   frame_encode_metadata_writer_.OnEncodeStarted(out_frame);
 
+  // Log frame encoding start timestamp for anomaly analysis
+  int64_t encode_start_us = rtc::TimeMicros();
+  RTC_LOG(LS_INFO) << "FRAME_ENCODE_START, frame_id=" << out_frame.timestamp()
+                   << ", encode_start_us=" << encode_start_us
+                   << ", width=" << out_frame.width()
+                   << ", height=" << out_frame.height();
+
   const int32_t encode_status = encoder_->Encode(out_frame, &next_frame_types_);
   was_encode_called_since_last_initialization_ = true;
+
+  // Log frame encoding end timestamp for anomaly analysis
+  int64_t encode_end_us = rtc::TimeMicros();
+  RTC_LOG(LS_INFO) << "FRAME_ENCODE_END, frame_id=" << out_frame.timestamp()
+                   << ", encode_end_us=" << encode_end_us
+                   << ", status=" << encode_status;
 
   if (encode_status < 0) {
     RTC_LOG(LS_ERROR) << "Encoder failed, failing encoder format: "
@@ -2439,7 +2459,9 @@ void VideoStreamEncoder::RunPostEncode(const EncodedImage& encoded_image,
 
   if (!frame_size.IsZero()) {
     frame_dropper_.Fill(frame_size.bytes(), !keyframe);
-    RTC_LOG(LS_INFO) << "Send Statistics Send Frame Size: " << frame_size.bytes() << " current time: " << rtc::TimeMillis();
+    RTC_LOG(LS_INFO) << "Send Statistics Send Frame Size: "
+                     << frame_size.bytes()
+                     << " current time: " << rtc::TimeMillis();
   }
 
   stream_resource_manager_.OnEncodeCompleted(encoded_image, time_sent_us,

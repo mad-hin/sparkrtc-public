@@ -219,6 +219,15 @@ void VCMDecodedFrameCallback::Decoded(VideoFrame& decodedImage,
 
   decodedImage.set_timestamp_us(
       frame_info->render_time ? frame_info->render_time->us() : -1);
+
+  // Log frame decoding end timestamp for anomaly analysis
+  int64_t decode_end_us = now.us();
+  int64_t decode_time_us = decode_time.us();
+  RTC_LOG(LS_INFO) << "FRAME_DECODE_END, frame_id=" << decodedImage.timestamp()
+                   << ", decode_end_us=" << decode_end_us
+                   << ", decode_time_us=" << decode_time_us
+                   << ", rtp_ts=" << decodedImage.timestamp();
+
   _receiveCallback->FrameToRender(decodedImage, qp, decode_time,
                                   frame_info->content_type,
                                   frame_info->frame_type);
@@ -294,6 +303,13 @@ int32_t VCMGenericDecoder::Decode(const EncodedImage& frame,
                                   int64_t render_time_ms) {
   TRACE_EVENT1("webrtc", "VCMGenericDecoder::Decode", "timestamp",
                frame.RtpTimestamp());
+
+  // Log frame decoding start timestamp for anomaly analysis
+  int64_t decode_start_us = now.us();
+  RTC_LOG(LS_INFO) << "FRAME_DECODE_START, frame_id=" << frame.RtpTimestamp()
+                   << ", decode_start_us=" << decode_start_us
+                   << ", rtp_ts=" << frame.RtpTimestamp();
+
   FrameInfo frame_info;
   frame_info.rtp_timestamp = frame.RtpTimestamp();
   frame_info.decode_start = now;

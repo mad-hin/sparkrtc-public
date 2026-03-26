@@ -129,6 +129,19 @@ bool RtpTransport::IsWritable(bool rtcp) const {
 bool RtpTransport::SendRtpPacket(rtc::CopyOnWriteBuffer* packet,
                                  const rtc::PacketOptions& options,
                                  int flags) {
+  // Log packet sending timestamp for anomaly analysis
+  int64_t send_time_us = rtc::TimeMicros();
+  webrtc::RtpPacketReceived parsed_packet(&header_extension_map_);
+  if (parsed_packet.Parse(*packet)) {
+    RTC_LOG(LS_INFO) << "PACKET_SEND, size=" << packet->size()
+                     << ", send_time_us=" << send_time_us
+                     << ", rtp_ts=" << parsed_packet.Timestamp()
+                     << ", seq=" << parsed_packet.SequenceNumber();
+  } else {
+    RTC_LOG(LS_INFO) << "PACKET_SEND, size=" << packet->size()
+                     << ", send_time_us=" << send_time_us;
+  }
+
   return SendPacket(false, packet, options, flags);
 }
 
@@ -261,6 +274,23 @@ void RtpTransport::OnReadPacket(rtc::PacketTransportInternal* transport,
                       << cricket::RtpPacketTypeToString(packet_type)
                       << " packet: wrong size=" << len;
     return;
+  }
+
+  // Log packet receiving timestamp for anomaly analysis
+  if (packet_type == cricket::RtpPacketType::kRtp) {
+    // Try to parse RTP header to get timestamp and sequence number
+    rtc::CopyOnWriteBuffer temp_packet(data, len);
+    webrtc::RtpPacketReceived parsed_packet(&header_extension_map_,
+                                            Timestamp::Micros(packet_time_us));
+    if (parsed_packet.Parse(rtc::CopyOnWriteBuffer(data, len))) {
+      RTC_LOG(LS_INFO) << "PACKET_RECEIVE, size=" << len
+                       << ", recv_time_us=" << packet_time_us
+                       << ", rtp_ts=" << parsed_packet.Timestamp()
+                       << ", seq=" << parsed_packet.SequenceNumber();
+    } else {
+      RTC_LOG(LS_INFO) << "PACKET_RECEIVE, size=" << len
+                       << ", recv_time_us=" << packet_time_us;
+    }
   }
 
   rtc::CopyOnWriteBuffer packet(data, len);

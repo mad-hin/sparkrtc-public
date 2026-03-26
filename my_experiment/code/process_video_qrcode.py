@@ -1,4 +1,5 @@
 import os
+import re
 import qrcode
 import cv2
 import argparse
@@ -182,6 +183,50 @@ def calc_ssim_fast(recv_raw_frames_dir, send_raw_frames_dir, ssim_res_dir, recei
 
     return frame_ssim
 
+def parse_timestamp_logs(log_file):
+    """
+    Parse structured timestamp log lines from a WebRTC log file.
+    Handles: FRAME_CAPTURE, FRAME_ENCODE_START, FRAME_ENCODE_END,
+             PACKET_SEND, PACKET_RECEIVE, FRAME_DECODE_START, FRAME_DECODE_END.
+    Returns a dict mapping event type -> list of {field: value} dicts.
+    """
+    event_types = [
+        'FRAME_CAPTURE', 'FRAME_ENCODE_START', 'FRAME_ENCODE_END',
+        'PACKET_SEND', 'PACKET_RECEIVE', 'FRAME_DECODE_START', 'FRAME_DECODE_END',
+    ]
+    events = {e: [] for e in event_types}
+    kv_re = re.compile(r'(\w+)=([-\d]+)')
+
+    if not os.path.exists(log_file):
+        print(f"[parse_timestamp_logs] File not found: {log_file}")
+        return events
+
+    with open(log_file, 'r', errors='replace') as f:
+        for line in f:
+            for event_type in event_types:
+                if event_type in line:
+                    idx = line.index(event_type)
+                    kv = dict(kv_re.findall(line[idx:]))
+                    events[event_type].append(kv)
+                    break
+
+    return events
+
+
+def save_timestamp_logs(events, out_dir):
+    """Save each event type's records to a separate CSV file in out_dir."""
+    os.makedirs(out_dir, exist_ok=True)
+    for event_type, rows in events.items():
+        if not rows:
+            continue
+        out_file = os.path.join(out_dir, event_type.lower() + '.csv')
+        keys = list(rows[0].keys())
+        with open(out_file, 'w') as f:
+            f.write(','.join(keys) + '\n')
+            for row in rows:
+                f.write(','.join(row.get(k, '') for k in keys) + '\n')
+
+
 def write_data_to_file(data_lists, file):
     with open(file, 'w') as f_file:
         data_len = min([len(x) for x in data_lists])
@@ -346,6 +391,14 @@ def decode_recv_video(cfg):
     received_frame_cnt = len(os.listdir(recv_raw_frames_dir))
 
     delay = calc_delay_framesize_rate(recv_dir, res_dir)
+
+    # Parse and save raw timestamp logs for anomaly analysis
+    ts_dir = res_dir + "timestamps/"
+    send_events = parse_timestamp_logs(recv_dir + "send.log")
+    recv_events = parse_timestamp_logs(recv_dir + "recv.log")
+    save_timestamp_logs(send_events, ts_dir + "send/")
+    save_timestamp_logs(recv_events, ts_dir + "recv/")
+
     drop_frames_index, receive_correspoding_send_index = scan_qrcode_fast(recv_raw_frames_dir, received_frame_cnt)
     print(f"Drop frames index: {drop_frames_index}")
     print(len(drop_frames_index))
