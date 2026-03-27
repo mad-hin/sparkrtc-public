@@ -102,4 +102,7 @@ The codebase is standard WebRTC with custom instrumentation at three pipeline st
 - `api/` — public API headers (start here when exploring the call setup flow)
 
 **Experiment measurement chain:**
-`process_video_qrcode.py` → embeds QR codes with frame timestamps → streams via `peerconnection_localvideo` → decodes received QR codes → computes per-frame delay, SSIM, PSNR → writes logs to `result/` and optionally posts results via `send_webhook.py`
+`process_video_qrcode.py` → embeds QR codes with frame timestamps → streams via `peerconnection_localvideo` → decodes received QR codes → computes per-frame delay, SSIM, PSNR → writes logs to `result/`
+
+**LLM analysis (Tab 3 in GUI):**
+`llm_analysis.py` summarises experiment logs into compact statistics (~2K tokens) and streams analysis from any LLM via OpenRouter (Claude, GPT, Gemini, Llama, etc.). Set `OPENROUTER_API_KEY` env var or enter it in the GUI. Model defaults to `anthropic/claude-sonnet-4` but any OpenRouter model ID works.

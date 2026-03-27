@@ -41,6 +41,7 @@ from PyQt6.QtWidgets import (
 sys.path.insert(0, os.path.dirname(__file__))
 import process_video_qrcode as pv
 import send_webhook as sw
+import llm_analysis
 
 
 # ---------------------------------------------------------------------------
@@ -425,9 +426,44 @@ class ExperimentTab(QWidget):
 
 
 # ---------------------------------------------------------------------------
-# Tab 3 – n8n Webhook
+# Stream worker – calls LLM, emits text chunks via signal
 # ---------------------------------------------------------------------------
-class WebhookTab(QWidget):
+class StreamWorker(QThread):
+    chunk_signal = pyqtSignal(str)
+    done_signal = pyqtSignal(bool, object)  # success, (summary_text, full_response)
+
+    def __init__(self, logs, api_key, model):
+        super().__init__()
+        self._logs = logs
+        self._api_key = api_key
+        self._model = model
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def run(self):
+        try:
+            def _on_chunk(text):
+                if self._cancelled:
+                    raise InterruptedError("cancelled")
+                self.chunk_signal.emit(text)
+
+            result = llm_analysis.analyze_experiment(
+                self._logs, self._api_key, self._model, on_chunk=_on_chunk,
+            )
+            self.done_signal.emit(True, result)
+        except InterruptedError:
+            self.done_signal.emit(False, None)
+        except Exception as exc:
+            self.chunk_signal.emit(f"\n\n[ERROR] {exc}")
+            self.done_signal.emit(False, None)
+
+
+# ---------------------------------------------------------------------------
+# Tab 3 – LLM Analysis (via OpenRouter)
+# ---------------------------------------------------------------------------
+class AnalysisTab(QWidget):
     def __init__(self):
         super().__init__()
         self._worker = None
@@ -436,44 +472,65 @@ class WebhookTab(QWidget):
 
         layout = QVBoxLayout(self)
 
-        cfg_group = QGroupBox("Webhook Configuration")
+        # --- API configuration ---
+        cfg_group = QGroupBox("API Configuration")
         cfg_form = QFormLayout(cfg_group)
-        self.url_edit = QLineEdit()
-        self.url_edit.setPlaceholderText("https://n8n.example.com/webhook/…")
+
+        self.key_edit = QLineEdit()
+        self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.key_edit.setPlaceholderText("sk-or-…")
+        self.key_edit.setText(os.environ.get("OPENROUTER_API_KEY", ""))
+        cfg_form.addRow("OpenRouter API Key:", self.key_edit)
+
+        self.model_edit = QLineEdit()
+        self.model_edit.setText("anthropic/claude-sonnet-4")
+        self.model_edit.setPlaceholderText("e.g. openai/gpt-4o, google/gemini-2.0-flash")
+        cfg_form.addRow("Model:", self.model_edit)
+
         self.outdir_label = QLabel("(set in Experiment tab)")
         self.data_label = QLabel("(set in Experiment tab)")
-        cfg_form.addRow("Webhook URL:", self.url_edit)
         cfg_form.addRow("Output dir:", self.outdir_label)
         cfg_form.addRow("Video name:", self.data_label)
         layout.addWidget(cfg_group)
 
+        # --- Buttons ---
         btn_row = QHBoxLayout()
-        self.send_btn = QPushButton("Send Logs to n8n")
-        self.send_btn.clicked.connect(self._send)
+        self.analyze_btn = QPushButton("Analyze Results")
+        self.analyze_btn.clicked.connect(self._analyze)
+        self.stop_btn = QPushButton("Stop")
+        self.stop_btn.clicked.connect(self._stop)
+        self.stop_btn.setEnabled(False)
         self.status_label = QLabel("–")
-        btn_row.addWidget(self.send_btn)
+        btn_row.addWidget(self.analyze_btn)
+        btn_row.addWidget(self.stop_btn)
         btn_row.addWidget(self.status_label)
         btn_row.addStretch()
         layout.addLayout(btn_row)
 
-        resp_group = QGroupBox("n8n Response / Suggestion  (editable)")
+        splitter = QSplitter(Qt.Orientation.Vertical)
+
+        # --- Analysis response ---
+        resp_group = QGroupBox("LLM Analysis  (editable)")
         resp_layout = QVBoxLayout(resp_group)
         self.response_edit = QTextEdit()
         self.response_edit.setPlaceholderText(
-            "n8n suggestion will appear here.\n"
+            "LLM analysis will stream here.\n"
             "You can edit, annotate, and copy freely."
         )
         resp_layout.addWidget(self.response_edit)
-        layout.addWidget(resp_group)
 
-        log_group = QGroupBox("Send Log")
-        log_layout = QVBoxLayout(log_group)
-        self.log = QTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setFont(_log_font())
-        self.log.setMaximumHeight(120)
-        log_layout.addWidget(self.log)
-        layout.addWidget(log_group)
+        # --- Summary sent to LLM ---
+        sum_group = QGroupBox("Summary Statistics (sent to LLM)")
+        sum_layout = QVBoxLayout(sum_group)
+        self.summary_edit = QTextEdit()
+        self.summary_edit.setReadOnly(True)
+        self.summary_edit.setFont(_log_font())
+        sum_layout.addWidget(self.summary_edit)
+
+        splitter.addWidget(resp_group)
+        splitter.addWidget(sum_group)
+        splitter.setSizes([400, 200])
+        layout.addWidget(splitter)
 
     def set_experiment_context(self, output_dir: str, data: str):
         self._output_dir = output_dir
@@ -481,45 +538,60 @@ class WebhookTab(QWidget):
         self.outdir_label.setText(output_dir or "(not set)")
         self.data_label.setText(data or "(not set)")
 
-    def _append(self, text: str):
-        self.log.append(text)
-
-    def _send(self):
-        url = self.url_edit.text().strip()
-        if not url:
-            self._append("[!] Enter a webhook URL.")
+    def _analyze(self):
+        api_key = self.key_edit.text().strip()
+        if not api_key:
+            self.status_label.setText("[!] Enter an API key.")
             return
         if not self._output_dir or not self._data:
-            self._append("[!] Run an experiment first (or set output_dir/data in Experiment tab).")
+            self.status_label.setText("[!] Run an experiment first.")
             return
 
-        self.send_btn.setEnabled(False)
-        self.status_label.setText("Sending…")
+        self.analyze_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.status_label.setText("Collecting logs…")
+        self.response_edit.clear()
+        self.summary_edit.clear()
 
-        def _do_send():
-            os.chdir(os.path.join(os.path.dirname(__file__)))
-            payload = sw.collect_logs(self._output_dir, self._data)
-            response = sw.send_to_webhook(url, payload)
-            return response
+        # Collect logs (fast, synchronous)
+        orig_dir = os.getcwd()
+        os.chdir(os.path.dirname(__file__))
+        logs = sw.collect_logs(self._output_dir, self._data)
+        os.chdir(orig_dir)
 
-        self._worker = Worker(_do_send)
-        self._worker.log_signal.connect(self._append)
-        self._worker.done_signal.connect(self._send_done)
+        # Show summary
+        summary = llm_analysis.summarize_logs(logs)
+        summary_text = llm_analysis.format_summary(logs, summary)
+        self.summary_edit.setPlainText(summary_text)
+
+        self.status_label.setText("Streaming…")
+        model = self.model_edit.text().strip() or "anthropic/claude-sonnet-4"
+
+        self._worker = StreamWorker(logs, api_key, model)
+        self._worker.chunk_signal.connect(self._on_chunk)
+        self._worker.done_signal.connect(self._on_done)
         self._worker.start()
 
-    def _send_done(self, ok: bool, response):
-        self.send_btn.setEnabled(True)
-        if not ok or response is None:
-            self.status_label.setText("✗ Failed")
-            return
-        self.status_label.setText(f"✓ HTTP {response.status_code}")
-        try:
-            body = response.json()
-            text = json.dumps(body, indent=2)
-        except Exception:
-            text = response.text
-        self.response_edit.setPlainText(text)
-        self._append(f"✓ Response received ({len(text)} chars).")
+    def _on_chunk(self, text: str):
+        cursor = self.response_edit.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.insertText(text)
+        self.response_edit.setTextCursor(cursor)
+
+    def _stop(self):
+        if self._worker:
+            self._worker.cancel()
+        self.status_label.setText("Cancelled")
+        self.analyze_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+
+    def _on_done(self, ok: bool, result):
+        self.analyze_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        if ok:
+            self.status_label.setText("Done")
+        elif self.status_label.text() != "Cancelled":
+            self.status_label.setText("Failed")
 
 
 # ---------------------------------------------------------------------------
@@ -534,14 +606,14 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
         self.preprocess_tab = PreprocessTab()
         self.experiment_tab = ExperimentTab()
-        self.webhook_tab = WebhookTab()
+        self.analysis_tab = AnalysisTab()
 
         tabs.addTab(self.preprocess_tab, "1 · Pre-processing")
         tabs.addTab(self.experiment_tab, "2 · Experiment & Logs")
-        tabs.addTab(self.webhook_tab, "3 · n8n Webhook")
+        tabs.addTab(self.analysis_tab, "3 · LLM Analysis")
 
-        # Wire experiment completion → webhook tab context
-        self.experiment_tab.experiment_done.connect(self.webhook_tab.set_experiment_context)
+        # Wire experiment completion → analysis tab context
+        self.experiment_tab.experiment_done.connect(self.analysis_tab.set_experiment_context)
 
         self.setCentralWidget(tabs)
         self.setStatusBar(QStatusBar())
