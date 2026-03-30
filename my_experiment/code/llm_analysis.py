@@ -11,26 +11,48 @@ from openai import OpenAI
 
 SYSTEM_PROMPT = """\
 You are a WebRTC video streaming performance analyst. You analyse experiment \
-results from SparkRTC, a low-latency WebRTC fork that measures per-frame \
-end-to-end latency, video quality (SSIM/PSNR), bitrate adaptation, and \
-frame-level timing through the encode-transport-decode pipeline.
+results from SparkRTC, a low-latency WebRTC fork. You receive summary \
+statistics from per-frame instrumentation AND periodic WebRTC getStats() \
+snapshots covering the full encode-transport-decode pipeline.
 
-Your analysis should:
-1. Assess overall streaming quality (latency, video quality, stability).
-2. Identify anomalies (delay spikes, quality drops, bitrate instability, packet loss).
-3. Correlate metrics (do quality drops coincide with bitrate changes or delay spikes?).
-4. Diagnose root causes when possible (congestion, CPU bottleneck, jitter buffer, etc.).
-5. Provide actionable recommendations for improving the streaming configuration.
-6. Rate the result 1-5 for: latency, quality, stability.
+Structure your analysis by layer, checking for these specific anomaly types:
+
+## Network Layer
+- **Latency Abnormal**: RTT p95 >100ms or high variance; end-to-end delay >200ms
+- **Loss Abnormal**: packet loss rate >1%; sequence number gaps; fractionLost >0.02
+
+## Transport Layer
+- **RTX (retransmission)**: retransmittedPacketsSent >0 indicates loss recovery is active; \
+high retransmission ratio suggests persistent loss
+- **FEC**: fecPacketsSent >0 means forward error correction is active; \
+high fecPacketsDiscarded suggests FEC overhead without benefit
+- **Rate Control — Late Response**: delay between congestion signal and bitrate drop; \
+targetBitrate stays high while loss increases
+- **Rate Control — Insufficient Degree**: targetBitrate drops but not enough to match \
+available bandwidth; persistent loss after adaptation
+
+## Application Layer
+- **Capturer — Frame Interval Anomaly**: FRAME_CAPTURE interval stddev >20% of expected; \
+irregular frame production
+- **Codec — Frame Size Overshoots**: encoded frame >3x median size; I-frame bursts
+- **Codec — Coding Queuing**: FRAME_CAPTURE to FRAME_ENCODE_START gap >10ms
+- **Codec — Coding Blockage**: encode duration >2x median; qualityLimitationReason=cpu
+
+For each anomaly found:
+1. State the anomaly type and which layer it belongs to
+2. Show the evidence (specific metric values)
+3. Diagnose the root cause
+4. Recommend a fix
 
 Metric reference:
-- Delay (ms): <100 excellent, 100-200 acceptable, >200 problematic for real-time.
-- SSIM (0-1): >0.95 excellent, 0.90-0.95 good, <0.90 visible degradation.
-- PSNR (dB): >40 excellent, 30-40 good, <30 poor.
-- Encode/decode duration: high values suggest CPU bottleneck.
-- Dropped frames: any drops indicate network or buffer issues.
+- Delay (ms): <100 excellent, 100-200 acceptable, >200 problematic
+- SSIM (0-1): >0.95 excellent, 0.90-0.95 good, <0.90 visible degradation
+- PSNR (dB): >40 excellent, 30-40 good, <30 poor
+- RTT (s): <0.05 excellent, 0.05-0.15 acceptable, >0.15 high
+- Jitter (s): <0.01 good, >0.03 problematic
 
-Be concise but thorough. Use bullet points. Highlight the most important findings first.\
+Rate the result 1-5 for: latency, quality, stability. \
+Be concise but thorough. Highlight the most important findings first.\
 """
 
 
@@ -153,6 +175,106 @@ def _parse_webrtc_events(text):
     return result
 
 
+def _parse_webrtc_stats(text):
+    """Parse WEBRTC_STATS lines from send.log/recv.log into per-type summaries."""
+    kv_re = re.compile(r"(\w+)=([-\w./]+)")
+    # Collect snapshots per type
+    snapshots = {}  # type -> list of {field: value_str}
+
+    for line in text.splitlines():
+        if "WEBRTC_STATS," not in line:
+            continue
+        idx = line.index("WEBRTC_STATS,")
+        kv = dict(kv_re.findall(line[idx:]))
+        stat_type = kv.pop("type", None)
+        if not stat_type:
+            continue
+        snapshots.setdefault(stat_type, []).append(kv)
+
+    result = {}
+
+    # Numeric fields to summarize per type
+    numeric_fields = {
+        "candidate-pair": [
+            "currentRoundTripTime", "totalRoundTripTime",
+            "availableOutgoingBitrate", "packetsSent", "packetsReceived",
+            "bytesSent", "bytesReceived",
+        ],
+        "inbound-rtp": [
+            "packetsReceived", "packetsLost", "jitter",
+            "framesDecoded", "framesDropped", "framesReceived",
+            "totalDecodeTime", "retransmittedPacketsReceived",
+            "fecPacketsReceived", "fecPacketsDiscarded",
+            "nackCount", "freezeCount", "totalFreezesDuration",
+            "jitterBufferDelay",
+        ],
+        "outbound-rtp": [
+            "packetsSent", "bytesSent",
+            "retransmittedPacketsSent", "retransmittedBytesSent",
+            "targetBitrate", "framesEncoded", "totalEncodeTime",
+            "nackCount", "hugeFramesSent", "totalPacketSendDelay",
+        ],
+        "remote-inbound-rtp": [
+            "roundTripTime", "totalRoundTripTime", "fractionLost",
+            "roundTripTimeMeasurements",
+        ],
+    }
+
+    for stat_type, rows in snapshots.items():
+        if not rows:
+            continue
+        type_summary = {"snapshot_count": len(rows)}
+
+        fields = numeric_fields.get(stat_type, [])
+        for field in fields:
+            vals = []
+            for row in rows:
+                v = row.get(field, "NA")
+                if v != "NA":
+                    try:
+                        vals.append(float(v))
+                    except ValueError:
+                        pass
+            if vals:
+                arr = np.array(vals)
+                # For cumulative counters, report last value and delta
+                if field in ("packetsSent", "packetsReceived", "bytesSent",
+                             "bytesReceived", "packetsLost", "framesDecoded",
+                             "framesDropped", "framesReceived", "framesEncoded",
+                             "retransmittedPacketsSent", "retransmittedBytesSent",
+                             "retransmittedPacketsReceived",
+                             "fecPacketsReceived", "fecPacketsDiscarded",
+                             "nackCount", "hugeFramesSent",
+                             "totalRoundTripTime", "roundTripTimeMeasurements",
+                             "totalDecodeTime", "totalEncodeTime",
+                             "totalPacketSendDelay", "totalFreezesDuration",
+                             "freezeCount"):
+                    type_summary[field] = {
+                        "last": float(arr[-1]),
+                        "first": float(arr[0]),
+                        "delta": float(arr[-1] - arr[0]),
+                    }
+                else:
+                    # Instantaneous values — show distribution
+                    type_summary[field] = {
+                        "mean": float(np.mean(arr)),
+                        "min": float(np.min(arr)),
+                        "max": float(np.max(arr)),
+                        "p95": float(np.percentile(arr, 95)) if len(arr) >= 2 else float(arr[0]),
+                    }
+
+        # Non-numeric fields (e.g. qualityLimitationReason)
+        if stat_type == "outbound-rtp":
+            reasons = [r.get("qualityLimitationReason", "NA") for r in rows if r.get("qualityLimitationReason", "NA") != "NA"]
+            if reasons:
+                from collections import Counter
+                type_summary["qualityLimitationReason"] = dict(Counter(reasons))
+
+        result[stat_type] = type_summary
+
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -208,10 +330,17 @@ def summarize_logs(logs):
             cv = float(np.std(arr) / mean) if mean > 0 else 0
             summary["rate"] = {**_percentiles(arr), "coeff_variation": cv}
 
-    # --- send.log / recv.log ---
+    # --- send.log / recv.log (custom instrumentation) ---
     for key in ("send_log", "recv_log"):
         if key in files and not files[key].startswith(("File not found", "Error")):
             summary[key] = _parse_webrtc_events(files[key])
+
+    # --- WEBRTC_STATS from send.log / recv.log (getStats() API) ---
+    for key in ("send_log", "recv_log"):
+        if key in files and not files[key].startswith(("File not found", "Error")):
+            stats = _parse_webrtc_stats(files[key])
+            if stats:
+                summary[key + "_stats"] = stats
 
     # --- statistics.csv (already compact) ---
     if "statistics_csv" in files and not files["statistics_csv"].startswith(("File not found", "Error")):
@@ -256,9 +385,13 @@ def format_summary(logs, summary):
     if "rate" in summary:
         _fmt_section("Bitrate (kbps)", summary["rate"], " kbps")
     if "send_log" in summary:
-        _fmt_section("Sender Pipeline", summary["send_log"])
+        _fmt_section("Sender Pipeline (custom instrumentation)", summary["send_log"])
     if "recv_log" in summary:
-        _fmt_section("Receiver Pipeline", summary["recv_log"])
+        _fmt_section("Receiver Pipeline (custom instrumentation)", summary["recv_log"])
+    if "send_log_stats" in summary:
+        _fmt_section("Sender WebRTC Stats (getStats API)", summary["send_log_stats"])
+    if "recv_log_stats" in summary:
+        _fmt_section("Receiver WebRTC Stats (getStats API)", summary["recv_log_stats"])
     if "statistics_csv" in summary:
         _fmt_section("Overall Statistics (CSV)", summary["statistics_csv"])
 
