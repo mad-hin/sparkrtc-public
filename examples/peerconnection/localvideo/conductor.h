@@ -19,6 +19,8 @@
 
 #include "api/media_stream_interface.h"
 #include "api/peer_connection_interface.h"
+#include "api/stats/rtc_stats_collector_callback.h"
+#include "api/stats/rtcstats_objects.h"
 #include "examples/peerconnection/localvideo/main_wnd.h"
 #include "examples/peerconnection/localvideo/peer_connection_localvideo.h"
 #include "rtc_base/thread.h"
@@ -121,8 +123,14 @@ class Conductor : public webrtc::PeerConnectionObserver,
   // Send a message to the remote peer.
   void SendMessage(const std::string& json_object);
 
+  // Periodic getStats() logging for experiment analysis.
+  void StartStatsLogging();
+  void StopStatsLogging();
+  void LogStatsOnce();
+
   int peer_id_;
   bool loopback_;
+  bool stats_logging_active_ = false;
   std::unique_ptr<rtc::Thread> signaling_thread_;
   rtc::scoped_refptr<webrtc::PeerConnectionInterface> peer_connection_;
   rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface>

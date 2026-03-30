@@ -41,6 +41,9 @@
 #include "api/video_codecs/video_encoder_factory_template_libvpx_vp8_adapter.h"
 #include "api/video_codecs/video_encoder_factory_template_libvpx_vp9_adapter.h"
 #include "api/video_codecs/video_encoder_factory_template_open_h264_adapter.h"
+#include "api/stats/rtc_stats_report.h"
+#include "api/task_queue/pending_task_safety_flag.h"
+#include "api/units/time_delta.h"
 #include "examples/peerconnection/localvideo/defaults.h"
 #include "modules/audio_device/include/audio_device.h"
 #include "modules/audio_processing/include/audio_processing.h"
@@ -109,6 +112,195 @@ class CapturerTrackSource : public webrtc::VideoTrackSource {
   }
   std::unique_ptr<webrtc::WrappedDesktopCapturer> capturer_;
   bool m_screencast = true;
+};
+
+// Callback that logs getStats() results via RTC_LOG.
+class StatsLogCallback : public webrtc::RTCStatsCollectorCallback {
+ public:
+  static rtc::scoped_refptr<StatsLogCallback> Create() {
+    return rtc::make_ref_counted<StatsLogCallback>();
+  }
+
+  void OnStatsDelivered(
+      const rtc::scoped_refptr<const webrtc::RTCStatsReport>& report) override {
+    // candidate-pair stats (RTT, bytes, packets)
+    for (const auto& stats :
+         report->GetStatsOfType<webrtc::RTCIceCandidatePairStats>()) {
+      if (!stats->nominated.has_value() || !*stats->nominated)
+        continue;
+      RTC_LOG(LS_INFO)
+          << "WEBRTC_STATS, type=candidate-pair"
+          << ", currentRoundTripTime="
+          << (stats->current_round_trip_time.has_value()
+                  ? std::to_string(*stats->current_round_trip_time)
+                  : "NA")
+          << ", totalRoundTripTime="
+          << (stats->total_round_trip_time.has_value()
+                  ? std::to_string(*stats->total_round_trip_time)
+                  : "NA")
+          << ", bytesSent="
+          << (stats->bytes_sent.has_value()
+                  ? std::to_string(*stats->bytes_sent)
+                  : "NA")
+          << ", bytesReceived="
+          << (stats->bytes_received.has_value()
+                  ? std::to_string(*stats->bytes_received)
+                  : "NA")
+          << ", packetsSent="
+          << (stats->packets_sent.has_value()
+                  ? std::to_string(*stats->packets_sent)
+                  : "NA")
+          << ", packetsReceived="
+          << (stats->packets_received.has_value()
+                  ? std::to_string(*stats->packets_received)
+                  : "NA")
+          << ", availableOutgoingBitrate="
+          << (stats->available_outgoing_bitrate.has_value()
+                  ? std::to_string(*stats->available_outgoing_bitrate)
+                  : "NA");
+    }
+
+    // inbound-rtp stats (receiver side)
+    for (const auto& stats :
+         report->GetStatsOfType<webrtc::RTCInboundRtpStreamStats>()) {
+      if (!stats->kind.has_value() || *stats->kind != "video")
+        continue;
+      RTC_LOG(LS_INFO)
+          << "WEBRTC_STATS, type=inbound-rtp"
+          << ", packetsReceived="
+          << (stats->packets_received.has_value()
+                  ? std::to_string(*stats->packets_received)
+                  : "NA")
+          << ", packetsLost="
+          << (stats->packets_lost.has_value()
+                  ? std::to_string(*stats->packets_lost)
+                  : "NA")
+          << ", jitter="
+          << (stats->jitter.has_value()
+                  ? std::to_string(*stats->jitter)
+                  : "NA")
+          << ", framesDecoded="
+          << (stats->frames_decoded.has_value()
+                  ? std::to_string(*stats->frames_decoded)
+                  : "NA")
+          << ", framesDropped="
+          << (stats->frames_dropped.has_value()
+                  ? std::to_string(*stats->frames_dropped)
+                  : "NA")
+          << ", framesReceived="
+          << (stats->frames_received.has_value()
+                  ? std::to_string(*stats->frames_received)
+                  : "NA")
+          << ", totalDecodeTime="
+          << (stats->total_decode_time.has_value()
+                  ? std::to_string(*stats->total_decode_time)
+                  : "NA")
+          << ", retransmittedPacketsReceived="
+          << (stats->retransmitted_packets_received.has_value()
+                  ? std::to_string(*stats->retransmitted_packets_received)
+                  : "NA")
+          << ", fecPacketsReceived="
+          << (stats->fec_packets_received.has_value()
+                  ? std::to_string(*stats->fec_packets_received)
+                  : "NA")
+          << ", fecPacketsDiscarded="
+          << (stats->fec_packets_discarded.has_value()
+                  ? std::to_string(*stats->fec_packets_discarded)
+                  : "NA")
+          << ", nackCount="
+          << (stats->nack_count.has_value()
+                  ? std::to_string(*stats->nack_count)
+                  : "NA")
+          << ", freezeCount="
+          << (stats->freeze_count.has_value()
+                  ? std::to_string(*stats->freeze_count)
+                  : "NA")
+          << ", totalFreezesDuration="
+          << (stats->total_freezes_duration.has_value()
+                  ? std::to_string(*stats->total_freezes_duration)
+                  : "NA")
+          << ", jitterBufferDelay="
+          << (stats->jitter_buffer_delay.has_value()
+                  ? std::to_string(*stats->jitter_buffer_delay)
+                  : "NA");
+    }
+
+    // outbound-rtp stats (sender side)
+    for (const auto& stats :
+         report->GetStatsOfType<webrtc::RTCOutboundRtpStreamStats>()) {
+      if (!stats->kind.has_value() || *stats->kind != "video")
+        continue;
+      RTC_LOG(LS_INFO)
+          << "WEBRTC_STATS, type=outbound-rtp"
+          << ", packetsSent="
+          << (stats->packets_sent.has_value()
+                  ? std::to_string(*stats->packets_sent)
+                  : "NA")
+          << ", bytesSent="
+          << (stats->bytes_sent.has_value()
+                  ? std::to_string(*stats->bytes_sent)
+                  : "NA")
+          << ", retransmittedPacketsSent="
+          << (stats->retransmitted_packets_sent.has_value()
+                  ? std::to_string(*stats->retransmitted_packets_sent)
+                  : "NA")
+          << ", retransmittedBytesSent="
+          << (stats->retransmitted_bytes_sent.has_value()
+                  ? std::to_string(*stats->retransmitted_bytes_sent)
+                  : "NA")
+          << ", targetBitrate="
+          << (stats->target_bitrate.has_value()
+                  ? std::to_string(*stats->target_bitrate)
+                  : "NA")
+          << ", framesEncoded="
+          << (stats->frames_encoded.has_value()
+                  ? std::to_string(*stats->frames_encoded)
+                  : "NA")
+          << ", totalEncodeTime="
+          << (stats->total_encode_time.has_value()
+                  ? std::to_string(*stats->total_encode_time)
+                  : "NA")
+          << ", qualityLimitationReason="
+          << (stats->quality_limitation_reason.has_value()
+                  ? *stats->quality_limitation_reason
+                  : "NA")
+          << ", nackCount="
+          << (stats->nack_count.has_value()
+                  ? std::to_string(*stats->nack_count)
+                  : "NA")
+          << ", hugeFramesSent="
+          << (stats->huge_frames_sent.has_value()
+                  ? std::to_string(*stats->huge_frames_sent)
+                  : "NA")
+          << ", totalPacketSendDelay="
+          << (stats->total_packet_send_delay.has_value()
+                  ? std::to_string(*stats->total_packet_send_delay)
+                  : "NA");
+    }
+
+    // remote-inbound-rtp stats (RTT from RTCP)
+    for (const auto& stats :
+         report->GetStatsOfType<webrtc::RTCRemoteInboundRtpStreamStats>()) {
+      RTC_LOG(LS_INFO)
+          << "WEBRTC_STATS, type=remote-inbound-rtp"
+          << ", roundTripTime="
+          << (stats->round_trip_time.has_value()
+                  ? std::to_string(*stats->round_trip_time)
+                  : "NA")
+          << ", totalRoundTripTime="
+          << (stats->total_round_trip_time.has_value()
+                  ? std::to_string(*stats->total_round_trip_time)
+                  : "NA")
+          << ", fractionLost="
+          << (stats->fraction_lost.has_value()
+                  ? std::to_string(*stats->fraction_lost)
+                  : "NA")
+          << ", roundTripTimeMeasurements="
+          << (stats->round_trip_time_measurements.has_value()
+                  ? std::to_string(*stats->round_trip_time_measurements)
+                  : "NA");
+    }
+  }
 };
 
 }  // namespace
@@ -224,6 +416,7 @@ bool Conductor::CreatePeerConnection() {
 
 void Conductor::DeletePeerConnection() {
   RTC_LOG(LS_INFO) << __FUNCTION__;
+  StopStatsLogging();
   main_wnd_->StopLocalRenderer();
   main_wnd_->StopRemoteRenderer();
   peer_connection_ = nullptr;
@@ -526,6 +719,8 @@ void Conductor::AddTracks() {
   }
 
   main_wnd_->SwitchToStreamingUI();
+
+  StartStatsLogging();
 }
 
 void Conductor::DisconnectFromCurrentPeer() {
@@ -645,4 +840,28 @@ void Conductor::OnFailure(webrtc::RTCError error) {
 void Conductor::SendMessage(const std::string& json_object) {
   std::string* msg = new std::string(json_object);
   main_wnd_->QueueUIThreadCallback(SEND_MESSAGE_TO_PEER, msg);
+}
+
+void Conductor::StartStatsLogging() {
+  if (stats_logging_active_)
+    return;
+  stats_logging_active_ = true;
+  RTC_LOG(LS_INFO) << "WEBRTC_STATS_LOGGING_START";
+  LogStatsOnce();
+}
+
+void Conductor::StopStatsLogging() {
+  stats_logging_active_ = false;
+  RTC_LOG(LS_INFO) << "WEBRTC_STATS_LOGGING_STOP";
+}
+
+void Conductor::LogStatsOnce() {
+  if (!stats_logging_active_ || !peer_connection_)
+    return;
+
+  peer_connection_->GetStats(StatsLogCallback::Create().get());
+
+  // Schedule next collection in 1 second.
+  signaling_thread_->PostDelayedTask(
+      [this]() { LogStatsOnce(); }, webrtc::TimeDelta::Seconds(1));
 }
