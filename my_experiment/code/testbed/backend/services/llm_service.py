@@ -104,25 +104,28 @@ async def stream_code_agent(
     import asyncio
     from openai import OpenAI
 
-    # Collect logs and summary
-    logs = send_webhook.collect_logs(output_dir, data_name)
-    summary = llm_analysis.summarize_logs(logs)
-    formatted = llm_analysis.format_summary(logs, summary)
-
-    # Read relevant C++ source files
-    source_excerpts = read_relevant_sources()
-
-    # Build messages
-    system = llm_analysis.SYSTEM_PROMPT + "\n\n" + CODE_AGENT_SYSTEM_PROMPT
-
-    user_content = formatted + "\n\n"
-    user_content += "## Relevant Source Code\n\n"
-    for path, code in source_excerpts.items():
-        user_content += f"### {path}\n```cpp\n{code}\n```\n\n"
-
     if mode == "fix-build" and build_output:
-        user_content += f"\n## Build Error Output\n```\n{build_output}\n```\n"
-        user_content += "\nThe previous patches failed to compile. Please provide corrected patches.\n"
+        # Lightweight prompt: only build errors, no full experiment re-analysis
+        system = CODE_AGENT_SYSTEM_PROMPT
+        # Truncate build output to last 3000 chars (the errors are at the end)
+        truncated_errors = build_output[-3000:] if len(build_output) > 3000 else build_output
+        user_content = (
+            f"## Build Error Output\n```\n{truncated_errors}\n```\n\n"
+            "The previous patches failed to compile. Analyze the compiler errors "
+            "and provide corrected patches. Only output the fixed <code_change> blocks.\n"
+        )
+    else:
+        # Full analysis mode
+        logs = send_webhook.collect_logs(output_dir, data_name)
+        summary = llm_analysis.summarize_logs(logs)
+        formatted = llm_analysis.format_summary(logs, summary)
+        source_excerpts = read_relevant_sources()
+
+        system = llm_analysis.SYSTEM_PROMPT + "\n\n" + CODE_AGENT_SYSTEM_PROMPT
+        user_content = formatted + "\n\n"
+        user_content += "## Relevant Source Code\n\n"
+        for path, code in source_excerpts.items():
+            user_content += f"### {path}\n```cpp\n{code}\n```\n\n"
 
     messages = [
         {"role": "system", "content": system},
