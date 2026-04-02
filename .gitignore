@@ -100,3 +100,18 @@ my_experiment/statistics.log
 .venv/
 .claude/
 
+node_modules/
+
+# Testbed build artifacts
+my_experiment/code/testbed/out/
+my_experiment/code/testbed/dist/
+my_experiment/code/testbed/node_modules/
+my_experiment/code/testbed/backend/.venv/
+
+# Testbed experiment results / logs / CSV
+my_experiment/code/testbed/result/
+my_experiment/code/testbed/statistics.csv
+my_experiment/code/testbed/statistics.log
+
+# Python cache
+__pycache__/
