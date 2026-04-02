@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom'
 import { initClient } from './api/client'
 import { useSettingsStore } from './store/settingsStore'
 import { useExperimentStore } from './store/experimentStore'
+import { useAnalysisStore } from './store/analysisStore'
 import DashboardLayout from './components/layout/DashboardLayout'
 import Dashboard from './components/pages/Dashboard'
 import Preprocess from './components/pages/Preprocess'
@@ -17,6 +18,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const loadSettings = useSettingsStore((s) => s.loadSaved)
   const loadExperiment = useExperimentStore((s) => s.loadSaved)
+  const loadAnalysis = useAnalysisStore((s) => s.loadSaved)
 
   useEffect(() => {
     async function init() {
@@ -24,6 +26,7 @@ export default function App() {
         await initClient()
         loadSettings()
         loadExperiment()
+        loadAnalysis()
         setReady(true)
       } catch (err) {
         setError(`Failed to connect to backend: ${err}`)

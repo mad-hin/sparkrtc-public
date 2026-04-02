@@ -1,5 +1,6 @@
 import React, { useRef } from 'react'
 import { BrainCircuit, Square, Trash2, Settings, KeyRound } from 'lucide-react'
+import ModelSelector from '../shared/ModelSelector'
 import { useNavigate } from 'react-router-dom'
 import { useAnalysisStore } from '../../store/analysisStore'
 import { useSettingsStore } from '../../store/settingsStore'
@@ -121,15 +122,7 @@ export default function Analysis() {
       <div className="bg-surface-secondary border border-slate-700 rounded-xl p-4 mb-4">
         <div className="flex items-center gap-3">
           {models.length > 0 ? (
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="bg-surface border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 min-w-[250px]"
-            >
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+            <ModelSelector value={selectedModel} onChange={setSelectedModel} models={models} />
           ) : (
             <span className="text-sm text-slate-400">
               Fetch models in <button onClick={() => navigate('/settings')} className="text-accent hover:underline">Settings</button> first

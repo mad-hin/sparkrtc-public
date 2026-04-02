@@ -30,10 +30,7 @@ export default function Experiment() {
     if (path) setFilePath(path)
   }
 
-  const handleSelectOutputDir = async () => {
-    const path = await window.electronAPI.openDirectory()
-    if (path) setOutputDir(path)
-  }
+  // Output dir is a relative path like "trace_name/output_1" — no browse dialog
 
   const handleRun = async () => {
     clearLogs()
@@ -131,13 +128,8 @@ export default function Experiment() {
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">Output Dir</label>
-            <div className="flex gap-2">
-              <input type="text" value={outputDir} onChange={(e) => setOutputDir(e.target.value)} placeholder="trace/output_1"
-                className="flex-1 bg-surface border border-slate-600 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" />
-              <button onClick={handleSelectOutputDir} className="p-1.5 bg-surface-tertiary hover:bg-slate-600 rounded-lg">
-                <FolderOpen size={14} className="text-slate-300" />
-              </button>
-            </div>
+            <input type="text" value={outputDir} onChange={(e) => setOutputDir(e.target.value)} placeholder="trace/output_1"
+              className="w-full bg-surface border border-slate-600 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" />
           </div>
         </div>
 

@@ -3,7 +3,7 @@
 import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from models.schemas import ApplyPatchesRequest
-from services.llm_service import stream_code_agent
+from services.agent_pipeline import AgentPipeline, AgentConfig
 from services.git_service import GitService
 from services.build_service import BuildService
 
@@ -19,16 +19,18 @@ async def ws_agent_stream(ws: WebSocket):
         data = await ws.receive_text()
         req = json.loads(data)
 
-        msg_type = req.get("type", "analyze")
-
-        async for msg in stream_code_agent(
+        pipeline = AgentPipeline()
+        config = AgentConfig(
             output_dir=req.get("output_dir", ""),
             data_name=req.get("data_name", ""),
             model=req.get("model", ""),
             api_key=req.get("api_key", ""),
+            context_length=req.get("context_length", 128000),
+            mode=req.get("type", "analyze"),
             build_output=req.get("build_output"),
-            mode=msg_type,
-        ):
+        )
+
+        async for msg in pipeline.run(config):
             await ws.send_json(msg)
 
         await ws.send_json({"type": "done"})
@@ -99,3 +101,9 @@ async def branch_status():
         "branch": git_svc.current_branch,
         "original_branch": git_svc.original_branch,
     }
+
+
+@router.get("/preview-branch")
+async def preview_branch():
+    """Return what the next branch name would be without creating it."""
+    return {"branch_name": git_svc.preview_branch_name()}

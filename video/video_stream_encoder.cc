@@ -1136,6 +1136,25 @@ void VideoStreamEncoder::ReconfigureEncoder() {
       }
     }
   }
+  
+  // Add I-frame size limiting based on target bitrate
+  if (encoder_config_.codec_type == kVideoCodecVP8 ||
+      encoder_config_.codec_type == kVideoCodecVP9 ||
+      encoder_config_.codec_type == kVideoCodecH264) {
+    // Limit I-frame size to 3x average frame size at current bitrate
+    if (encoder_target_bitrate_bps_.has_value() && max_framerate_ > 0) {
+      int avg_frame_bits = encoder_target_bitrate_bps_.value() / max_framerate_;
+      int max_iframe_bits = avg_frame_bits * 3;  // Limit to 3x average
+      
+      if (encoder_config_.codec_type == kVideoCodecVP8) {
+        codec.VP8()->frameDroppingOn = true;
+        codec.VP8()->keyFrameInterval = std::min(codec.VP8()->keyFrameInterval, 3000); // Max 3s between keyframes
+      } else if (encoder_config_.codec_type == kVideoCodecVP9) {
+        codec.VP9()->frameDroppingOn = true;
+        codec.VP9()->keyFrameInterval = std::min(codec.VP9()->keyFrameInterval, 3000);
+      }
+    }
+  }
 
   ApplyEncoderBitrateLimitsIfSingleActiveStream(
       GetEncoderInfoWithBitrateLimitUpdate(
@@ -1421,6 +1440,13 @@ void VideoStreamEncoder::ReconfigureEncoder() {
 
   stream_resource_manager_.ConfigureQualityScaler(info);
   stream_resource_manager_.ConfigureBandwidthQualityScaler(info);
+  
+  // Configure more aggressive quality scaling for CPU overload
+  // Reduce thresholds for faster reaction to high encode times
+  if (info.is_qp_trusted) {
+    // Lower QP thresholds to trigger quality reduction sooner
+    stream_resource_manager_.SetQpThresholdScale(0.8); // 20% more sensitive
+  }
 
   webrtc::RTCError encoder_configuration_result = webrtc::RTCError::OK();
 

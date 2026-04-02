@@ -72,6 +72,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         headers: { 'X-Api-Key': apiKey }
       })
       set({ models })
+      // Cache models in localStorage
+      localStorage.setItem('sparkrtc-models', JSON.stringify(models))
     } catch (err) {
       console.error('Failed to fetch models:', err)
     } finally {
@@ -109,7 +111,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (saved.apiKey) set({ apiKey: saved.apiKey })
     if (saved.repoPath) {
       set({ repoPath: saved.repoPath })
-      // Notify backend on load too
       api('/api/settings/repo-path', {
         method: 'POST',
         body: JSON.stringify({ repo_path: saved.repoPath })
@@ -118,6 +119,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (saved.theme) {
       set({ theme: saved.theme })
       document.documentElement.classList.toggle('dark', saved.theme === 'dark')
+    }
+    // Load cached models immediately, then refresh from API in background
+    try {
+      const cached = JSON.parse(localStorage.getItem('sparkrtc-models') || '[]')
+      if (cached.length > 0) set({ models: cached })
+    } catch { /* ignore */ }
+    if (saved.apiKey) {
+      // Auto-fetch fresh models in background
+      setTimeout(() => get().fetchModels(), 500)
     }
   }
 }))

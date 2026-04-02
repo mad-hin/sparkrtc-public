@@ -1,5 +1,6 @@
 """Git service: temp branch management and patch application."""
 
+import re
 import subprocess
 import tempfile
 from datetime import datetime
@@ -21,15 +22,34 @@ class GitService:
             check=check,
         )
 
+    def _next_branch_name(self) -> str:
+        """Generate branch name in format test-DDMMYY-vN with auto-increment."""
+        date_str = datetime.now().strftime("%d%m%y")
+        prefix = f"test-{date_str}-v"
+
+        # List existing branches matching today's date
+        result = self._run("branch", "--list", f"test-{date_str}-v*", check=False)
+        existing = result.stdout.strip().splitlines()
+
+        max_version = 0
+        for branch in existing:
+            branch = branch.strip().lstrip("* ")
+            match = re.search(rf"test-{date_str}-v(\d+)$", branch)
+            if match:
+                max_version = max(max_version, int(match.group(1)))
+
+        return f"{prefix}{max_version + 1}"
+
+    def preview_branch_name(self) -> str:
+        """Return what the next branch name would be without creating it."""
+        return self._next_branch_name()
+
     def create_branch(self) -> str:
         """Create a temp branch from HEAD."""
-        # Save current branch
         result = self._run("rev-parse", "--abbrev-ref", "HEAD")
         self.original_branch = result.stdout.strip()
 
-        # Create and checkout new branch
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        branch_name = f"sparkrtc-agent/{ts}"
+        branch_name = self._next_branch_name()
         self._run("checkout", "-b", branch_name)
         self.current_branch = branch_name
         return branch_name

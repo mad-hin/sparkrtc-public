@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SparkRTC is a fork of WebRTC optimized for ultra-low latency. On top of the WebRTC stack it adds:
 - Custom instrumentation (encode/decode/transport logging) in `modules/video_coding/generic_decoder.cc`, `pc/rtp_transport.cc`, and `video/video_stream_encoder.cc`
+- Periodic WebRTC getStats() logging in `examples/peerconnection/localvideo/conductor.cc` (candidate-pair, inbound-rtp, outbound-rtp, remote-inbound-rtp)
 - A Python experiment framework in `my_experiment/` for measuring per-frame delay, SSIM, and PSNR using embedded QR codes
 - A `peerconnection_localvideo` example that streams YUV files instead of camera input
 
@@ -94,6 +95,13 @@ The codebase is standard WebRTC with custom instrumentation at three pipeline st
 - `pc/rtp_transport.cc` — receives packets; logs `PACKET_RECEIVE` with size, RTP timestamp, and sequence number
 - `modules/video_coding/generic_decoder.cc` — decodes frames; logs `FRAME_DECODE_START`/`FRAME_DECODE_END` with frame ID and decode duration
 
+**Periodic getStats() logging (`examples/peerconnection/localvideo/conductor.cc`):**
+- Logs `WEBRTC_STATS` every 1s via `RTC_LOG` with `type=` prefix and key=value pairs
+- `candidate-pair`: RTT, bytes/packets sent/received, available bitrate
+- `inbound-rtp`: packets lost, jitter, frames decoded/dropped, RTX/FEC/NACK counts, freeze stats
+- `outbound-rtp`: retransmissions, target bitrate, encode time, quality limitation reason
+- `remote-inbound-rtp`: round-trip time, fraction lost
+
 **Key WebRTC modules:**
 - `modules/congestion_controller/` — bitrate adaptation (GCC/BBR)
 - `modules/rtp_rtcp/` — RTP/RTCP protocol
@@ -105,4 +113,12 @@ The codebase is standard WebRTC with custom instrumentation at three pipeline st
 `process_video_qrcode.py` → embeds QR codes with frame timestamps → streams via `peerconnection_localvideo` → decodes received QR codes → computes per-frame delay, SSIM, PSNR → writes logs to `result/`
 
 **LLM analysis (Tab 3 in GUI):**
-`llm_analysis.py` summarises experiment logs into compact statistics (~2K tokens) and streams analysis from any LLM via OpenRouter (Claude, GPT, Gemini, Llama, etc.). Set `OPENROUTER_API_KEY` env var or enter it in the GUI. Model defaults to `anthropic/claude-sonnet-4` but any OpenRouter model ID works.
+`llm_analysis.py` summarises experiment logs into compact statistics (~2K tokens) and streams analysis from any LLM via OpenRouter (Claude, GPT, Gemini, Llama, etc.). Select a model from the dropdown or type a custom OpenRouter model ID.
+
+**Settings (Tab 4 in GUI):**
+Configure and save OpenRouter API key (persisted via QSettings), view account balance/credits, and fetch available models from the OpenRouter API. The API key can also be set via `OPENROUTER_API_KEY` env var.
+
+**Anomaly taxonomy** (what the LLM analyses):
+- Network: latency abnormal, loss abnormal
+- Transport: RTX/FEC activity, rate control (late response, insufficient degree)
+- Application: capturer frame interval anomaly, codec frame size overshoots, coding queuing, coding blockage

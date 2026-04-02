@@ -3,8 +3,6 @@
 import asyncio
 import json
 import os
-import subprocess
-import time
 from pathlib import Path
 from typing import Optional
 from fastapi import WebSocket
@@ -46,8 +44,11 @@ class ExperimentRunner:
     async def start(self, req: ExperimentRequest):
         self._running = True
 
-        # output_dir must be in "trace/output_N" format for process_video_qrcode
+        # output_dir must be a relative path like "trace_name/output_1"
         output_dir = req.output_dir.strip() if req.output_dir else ""
+        if os.path.isabs(output_dir):
+            parts = Path(output_dir).parts
+            output_dir = "/".join(parts[-2:]) if len(parts) >= 2 else parts[-1] if parts else ""
         if not output_dir or "/" not in output_dir:
             output_dir = "default_run/output_1"
 
@@ -56,132 +57,69 @@ class ExperimentRunner:
         self._data_name = data_name
 
         repo_root = get_repo_path()
-        # my_experiment/ is two levels below repo root
-        experiment_dir = os.path.join(repo_root, "my_experiment")
-        code_dir = os.path.join(experiment_dir, "code")
+        code_dir = os.path.join(repo_root, "my_experiment", "code")
 
-        client_bin = os.path.join(repo_root, "out", "Default", "peerconnection_localvideo")
+        # Pre-flight checks
         server_bin = os.path.join(repo_root, "out", "Default", "peerconnection_server")
+        client_bin = os.path.join(repo_root, "out", "Default", "peerconnection_localvideo")
+        send_video = os.path.join(repo_root, "my_experiment", "data", data_name + "_qrcode.yuv")
 
-        server_ip = "127.0.0.1"
-        port = "8888"
+        for path, label in [
+            (server_bin, "peerconnection_server"),
+            (client_bin, "peerconnection_localvideo"),
+        ]:
+            if not os.path.exists(path):
+                await self._broadcast("server", f"Error: {label} not found at {path}\n")
+                await self._broadcast("server", "Make sure repo path is correct in Settings and binaries are built.\n")
+                self._running = False
+                return
 
-        recv_dir = os.path.join(experiment_dir, "result", output_dir, "rec", data_name)
-        recv_file = os.path.join(recv_dir, "recon.yuv")
-        send_video_path = os.path.join(experiment_dir, "data", data_name + "_qrcode.yuv")
-        send_log_file = os.path.join(recv_dir, "send.log")
+        if not os.path.exists(send_video):
+            await self._broadcast("server", f"Error: QR-coded video not found at {send_video}\n")
+            await self._broadcast("server", "Run Pre-process first to generate the YUV file with QR codes.\n")
+            self._running = False
+            return
+
+        import process_video_qrcode
+        import argparse
+        import subprocess as _sp
+
+        # Kill any leftover peerconnection processes from previous runs
+        for proc_name in ["peerconnection_server", "peerconnection_localvideo"]:
+            _sp.run(["pkill", "-f", proc_name], capture_output=True)
+
+        cfg = argparse.Namespace(
+            data=data_name,
+            width=req.width,
+            height=req.height,
+            fps=req.fps,
+            output_dir=output_dir,
+        )
 
         async def _run():
-            server_proc = None
-            recv_proc = None
             try:
                 loop = asyncio.get_event_loop()
+                await self._broadcast("server", f"Starting experiment: data={data_name}, output={output_dir}\n")
+                await self._broadcast("server", f"Using binaries from {repo_root}/out/Default/\n")
 
-                os.makedirs(recv_dir, exist_ok=True)
-
-                # Verify binaries exist
-                for binary, name in [(server_bin, "peerconnection_server"), (client_bin, "peerconnection_localvideo")]:
-                    if not os.path.exists(binary):
-                        await self._broadcast("server", f"Error: {name} not found at {binary}\n")
-                        await self._broadcast("server", f"Make sure the repo path is correct in Settings and binaries are built.\n")
-                        return
-
-                if not os.path.exists(send_video_path):
-                    await self._broadcast("server", f"Error: Send video not found at {send_video_path}\n")
-                    await self._broadcast("server", f"Run Pre-process first to generate the QR-coded YUV file.\n")
-                    return
-
-                # Start server
-                await self._broadcast("server", f"Starting peerconnection_server on port {port}...\n")
-                server_proc = subprocess.Popen(
-                    [server_bin, "--port", port],
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    cwd=repo_root,
-                )
-                await asyncio.sleep(1)
-
-                # Start receiver
-                await self._broadcast("receiver", f"Starting receiver, saving to {recv_file}...\n")
-                recv_proc = subprocess.Popen(
-                    [client_bin, "--recon", recv_file, "--server", server_ip, "--port", port],
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    cwd=repo_root,
-                )
-                await asyncio.sleep(1)
-
-                # Start sender
-                await self._broadcast("sender", f"Starting sender with {send_video_path}...\n")
-                send_log_fh = open(send_log_file, "w")
-                send_proc = subprocess.Popen(
-                    [
-                        client_bin, "--file", send_video_path,
-                        "--height", str(req.height), "--width", str(req.width),
-                        "--fps", str(req.fps),
-                        "--server", server_ip, "--port", port,
-                    ],
-                    stdout=send_log_fh, stderr=subprocess.STDOUT,
-                    cwd=repo_root,
-                )
-
-                # Stream server output while sender runs
-                def _wait_and_stream():
-                    while send_proc.poll() is None:
-                        if server_proc and server_proc.stdout:
-                            line = server_proc.stdout.readline()
-                            if line:
-                                pass  # Server output is verbose, skip
-                        time.sleep(0.1)
-                    send_proc.wait()
-
-                await loop.run_in_executor(None, _wait_and_stream)
-                send_log_fh.close()
-
-                await self._broadcast("sender", "Sender finished.\n")
-
-                # Kill receiver and server
-                if recv_proc:
-                    recv_proc.terminate()
-                    recv_proc.wait(timeout=5)
-                if server_proc:
-                    server_proc.terminate()
-                    server_proc.wait(timeout=5)
-
-                await self._broadcast("server", "Server and receiver stopped.\n")
-
-                # Post-process: decode received video
-                await self._broadcast("server", "Running post-processing (decode, SSIM, PSNR)...\n")
-                import process_video_qrcode
-                import argparse
-
-                cfg = argparse.Namespace(
-                    data=data_name,
-                    width=req.width,
-                    height=req.height,
-                    fps=req.fps,
-                    output_dir=output_dir,
-                )
-
-                def _decode():
+                # Use the original send_and_recv_video which handles all process
+                # spawning, log capture (send.log, recv.log), and post-processing.
+                # It must run with cwd=my_experiment/code/ because all its paths
+                # are relative to that directory.
+                def _run_experiment():
                     saved_cwd = os.getcwd()
                     try:
                         os.chdir(code_dir)
-                        process_video_qrcode.decode_recv_video(cfg)
+                        process_video_qrcode.send_and_recv_video(cfg)
                     finally:
                         os.chdir(saved_cwd)
 
-                await loop.run_in_executor(None, _decode)
+                await loop.run_in_executor(None, _run_experiment)
                 await self._broadcast("server", "\nExperiment complete.\n")
 
             except Exception as e:
                 await self._broadcast("server", f"\nError: {e}\n")
             finally:
-                # Cleanup processes
-                for proc in [recv_proc, server_proc]:
-                    if proc and proc.poll() is None:
-                        try:
-                            proc.kill()
-                        except Exception:
-                            pass
                 self._running = False
                 for ws in self._ws_clients:
                     try:

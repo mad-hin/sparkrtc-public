@@ -7,6 +7,13 @@ interface CodeAgentState {
   analysisMarkdown: string
   suggestions: CodeSuggestion[]
 
+  // Pipeline progress
+  currentStep: number      // 0=idle, 1=anomaly analysis, 2=deep dive, 3=code changes
+  stepMessage: string
+  thinkingContent: string
+  thinkingVisible: boolean
+  filesRead: string[]
+
   // Branch management
   branchName: string | null
   patchesApplied: boolean
@@ -26,6 +33,10 @@ interface CodeAgentState {
   toggleSuggestion: (id: string) => void
   acceptAll: () => void
   rejectAll: () => void
+  setCurrentStep: (step: number, message: string) => void
+  appendThinking: (chunk: string) => void
+  setThinkingVisible: (visible: boolean) => void
+  setFilesRead: (files: string[]) => void
   setBranchName: (name: string | null) => void
   setPatchesApplied: (applied: boolean) => void
   setBuildStatus: (status: Partial<BuildStatus>) => void
@@ -41,6 +52,11 @@ export const useCodeAgentStore = create<CodeAgentState>((set) => ({
   streaming: false,
   analysisMarkdown: '',
   suggestions: [],
+  currentStep: 0,
+  stepMessage: '',
+  thinkingContent: '',
+  thinkingVisible: false,
+  filesRead: [],
   branchName: null,
   patchesApplied: false,
   buildStatus: { ...initialBuildStatus },
@@ -67,6 +83,11 @@ export const useCodeAgentStore = create<CodeAgentState>((set) => ({
     set((state) => ({
       suggestions: state.suggestions.map((s) => ({ ...s, accepted: false }))
     })),
+  setCurrentStep: (step, message) => set({ currentStep: step, stepMessage: message }),
+  appendThinking: (chunk) =>
+    set((state) => ({ thinkingContent: state.thinkingContent + chunk })),
+  setThinkingVisible: (visible) => set({ thinkingVisible: visible }),
+  setFilesRead: (files) => set({ filesRead: files }),
   setBranchName: (name) => set({ branchName: name }),
   setPatchesApplied: (applied) => set({ patchesApplied: applied }),
   setBuildStatus: (status) =>
@@ -79,6 +100,11 @@ export const useCodeAgentStore = create<CodeAgentState>((set) => ({
       streaming: false,
       analysisMarkdown: '',
       suggestions: [],
+      currentStep: 0,
+      stepMessage: '',
+      thinkingContent: '',
+      thinkingVisible: false,
+      filesRead: [],
       branchName: null,
       patchesApplied: false,
       buildStatus: { ...initialBuildStatus },
