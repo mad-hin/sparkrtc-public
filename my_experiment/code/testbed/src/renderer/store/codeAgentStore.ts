@@ -7,6 +7,13 @@ interface CodeAgentState {
   analysisMarkdown: string
   suggestions: CodeSuggestion[]
 
+  // Summary statistics from log collection
+  summaryText: string
+  summaryFoundFiles: string[]
+  summaryMissingFiles: string[]
+  summaryOutputDir: string
+  summaryDataName: string
+
   // Pipeline progress
   currentStep: number      // 0=idle, 1=anomaly analysis, 2=deep dive, 3=code changes
   stepMessage: string
@@ -37,6 +44,7 @@ interface CodeAgentState {
   appendThinking: (chunk: string) => void
   setThinkingVisible: (visible: boolean) => void
   setFilesRead: (files: string[]) => void
+  setSummary: (text: string, found: string[], missing: string[], outputDir: string, dataName: string) => void
   setBranchName: (name: string | null) => void
   setPatchesApplied: (applied: boolean) => void
   setBuildStatus: (status: Partial<BuildStatus>) => void
@@ -52,6 +60,11 @@ export const useCodeAgentStore = create<CodeAgentState>((set) => ({
   streaming: false,
   analysisMarkdown: '',
   suggestions: [],
+  summaryText: '',
+  summaryFoundFiles: [],
+  summaryMissingFiles: [],
+  summaryOutputDir: '',
+  summaryDataName: '',
   currentStep: 0,
   stepMessage: '',
   thinkingContent: '',
@@ -88,6 +101,13 @@ export const useCodeAgentStore = create<CodeAgentState>((set) => ({
     set((state) => ({ thinkingContent: state.thinkingContent + chunk })),
   setThinkingVisible: (visible) => set({ thinkingVisible: visible }),
   setFilesRead: (files) => set({ filesRead: files }),
+  setSummary: (text, found, missing, outputDir, dataName) => set({
+    summaryText: text,
+    summaryFoundFiles: found,
+    summaryMissingFiles: missing,
+    summaryOutputDir: outputDir,
+    summaryDataName: dataName,
+  }),
   setBranchName: (name) => set({ branchName: name }),
   setPatchesApplied: (applied) => set({ patchesApplied: applied }),
   setBuildStatus: (status) =>
@@ -100,6 +120,11 @@ export const useCodeAgentStore = create<CodeAgentState>((set) => ({
       streaming: false,
       analysisMarkdown: '',
       suggestions: [],
+      summaryText: '',
+      summaryFoundFiles: [],
+      summaryMissingFiles: [],
+      summaryOutputDir: '',
+      summaryDataName: '',
       currentStep: 0,
       stepMessage: '',
       thinkingContent: '',

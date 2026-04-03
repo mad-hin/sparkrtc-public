@@ -3,8 +3,9 @@
 import csv
 from pathlib import Path
 
-CODE_DIR = Path(__file__).resolve().parent.parent.parent
-RESULT_DIR = CODE_DIR.parent / "result"
+# __file__ = .../my_experiment/code/testbed/backend/services/log_collector.py
+# We need .../my_experiment/result
+RESULT_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "result"
 
 
 def load_timestamp_logs(output_dir: str, data_name: str) -> list[dict]:

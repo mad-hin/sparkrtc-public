@@ -22,7 +22,9 @@ interface ExperimentState {
 
 function saveContext(output_dir: string | null, data_name: string | null) {
   if (output_dir && data_name) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ output_dir, data_name }))
+    // Sanitize data_name: strip directory path and .yuv extension
+    const dn = data_name.replace(/^.*[\\/]/, '').replace(/\.yuv$/, '')
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ output_dir, data_name: dn }))
   }
 }
 
@@ -85,8 +87,11 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
       if (saved.output_dir && saved.data_name) {
+        // Sanitize data_name: strip directory path and .yuv extension
+        let dn = saved.data_name as string
+        dn = dn.replace(/^.*[\\/]/, '').replace(/\.yuv$/, '')
         set({
-          status: { running: false, output_dir: saved.output_dir, data_name: saved.data_name }
+          status: { running: false, output_dir: saved.output_dir, data_name: dn }
         })
       }
     } catch { /* ignore */ }

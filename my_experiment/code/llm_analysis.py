@@ -38,14 +38,14 @@ occur if the component operated normally.
 ### Coding Blockage
 - Encode duration > 2x median; qualityLimitationReason=cpu
 
-## Network Layer Diagnosis (§4.4.1 — Latency vs Loss inference)
+## Network Layer Diagnosis (Latency vs Loss inference)
 Use per-packet send/receive timestamps to infer:
 - t_latency: time of each latency rise (OWD > 1.2x baseline)
 - t_loss: send time of each lost packet (missing seq on receiver)
 - If t_latency < t_loss → **Latency Abnormal** (congestion-driven)
 - If t_latency >= t_loss → **Loss Abnormal** (non-congestion, e.g., link noise)
 
-## Transport Layer Diagnosis (§4.4.2 — Response Timeliness & Sufficiency)
+## Transport Layer Diagnosis (Response Timeliness & Sufficiency)
 
 ### Rate Control Evaluation
 - Timely Response: time from latency rise to first rate reduction < RTT + 50ms

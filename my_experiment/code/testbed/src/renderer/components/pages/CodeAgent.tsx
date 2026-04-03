@@ -96,6 +96,9 @@ export default function CodeAgent() {
           case 'analysis':
             store.appendAnalysis(msg.chunk)
             break
+          case 'summary':
+            store.setSummary(msg.text, msg.found_files, msg.missing_files, msg.output_dir, msg.data_name)
+            break
           case 'files_read':
             store.setFilesRead(msg.files)
             break
@@ -362,6 +365,41 @@ export default function CodeAgent() {
           {/* Step progress indicator */}
           {store.streaming && store.currentStep > 0 && (
             <StepIndicator currentStep={store.currentStep} message={store.stepMessage} />
+          )}
+
+          {/* Summary Statistics (collapsible) */}
+          {store.summaryText && (
+            <details className="bg-surface-secondary border border-slate-700 rounded-xl">
+              <summary className="px-4 py-2.5 cursor-pointer text-xs text-slate-400 hover:text-slate-300 flex items-center gap-2">
+                <FileCode size={14} />
+                Summary Statistics
+                <span className="ml-auto flex gap-2">
+                  {store.summaryFoundFiles.length > 0 && (
+                    <span className="text-success">{store.summaryFoundFiles.length} found</span>
+                  )}
+                  {store.summaryMissingFiles.length > 0 && (
+                    <span className="text-warning">{store.summaryMissingFiles.length} missing</span>
+                  )}
+                </span>
+              </summary>
+              <div className="px-4 pb-3 space-y-2">
+                <div className="text-[10px] font-mono text-slate-500">
+                  <span className="text-slate-400">dir:</span> {store.summaryOutputDir}
+                  <span className="text-slate-400 ml-3">data:</span> {store.summaryDataName}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {store.summaryFoundFiles.map((f) => (
+                    <span key={f} className="text-[10px] font-mono bg-success/10 text-success px-2 py-0.5 rounded">{f}</span>
+                  ))}
+                  {store.summaryMissingFiles.map((f) => (
+                    <span key={f} className="text-[10px] font-mono bg-warning/10 text-warning px-2 py-0.5 rounded">{f}</span>
+                  ))}
+                </div>
+                <pre className="text-xs font-mono text-slate-400 whitespace-pre-wrap leading-relaxed max-h-64 overflow-auto">
+                  {store.summaryText}
+                </pre>
+              </div>
+            </details>
           )}
 
           {/* Thinking / Reasoning (collapsible) */}

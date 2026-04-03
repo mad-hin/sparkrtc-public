@@ -5,10 +5,8 @@ import uuid
 from dataclasses import dataclass
 from typing import AsyncIterator
 
-import send_webhook
 import llm_analysis
 from openai import OpenAI
-from services.log_collector import RESULT_DIR
 from services.config import get_repo_path
 from services.file_reader import (
     read_relevant_sources,
@@ -45,6 +43,21 @@ Rules:
 - Keep changes minimal and focused on the identified anomaly
 - Prefer parameter tuning over architectural changes
 - Each <code_change> block must be a valid unified diff
+
+CRITICAL — your changes MUST compile:
+- Only modify code you can see in the provided source excerpts. Never invent \
+functions, classes, methods, variables, macros, or headers that do not appear \
+in the excerpts.
+- Preserve existing #include directives unless you are certain a new one is \
+required, and only add headers that are part of the WebRTC source tree or the \
+C++ standard library.
+- Match the exact types, signatures, and namespaces shown in the source. Do \
+not change function signatures or class interfaces unless that is the explicit \
+goal of your fix.
+- Do not add new member variables to classes unless the header is provided and \
+you show the corresponding header change.
+- If you are unsure whether a symbol exists, do NOT use it. Stick to what is \
+visible in the code you were given.
 """
 
 # ---------------------------------------------------------------------------
@@ -123,11 +136,16 @@ Do NOT output code diffs yet — just the diagnosis and change plan.\
 STEP3_SYSTEM = """\
 You are a WebRTC code improvement agent. You have been given a diagnosis and change plan.
 
-Now generate the EXACT code changes as unified diffs.
+If the diagnosis concludes that the system is operating normally and no code \
+changes are needed, say so clearly and do NOT output any <code_change> blocks.
+
+Otherwise, generate the EXACT code changes as unified diffs.
 
 For each code change suggestion:
 1. Explain WHY the change should help (link to the anomaly)
 2. Show the EXACT change as a unified diff inside <code_change> tags
+3. Before writing each diff, verify that every symbol, type, and function you \
+reference actually exists in the provided source code. Your changes MUST compile.
 
 """ + CODE_CHANGE_FORMAT
 
@@ -141,11 +159,15 @@ Your task:
 1. For each anomaly, diagnose the root cause by referencing specific code.
 2. Identify the exact function, parameter, or logic that should change.
 3. Explain your reasoning clearly.
-4. Then generate the EXACT code changes as unified diffs.
+4. If the diagnosis concludes that the system is operating normally and no code \
+changes are needed, say so clearly and do NOT output any <code_change> blocks. \
+Otherwise, generate the EXACT code changes as unified diffs.
 
 For each code change suggestion:
 - Explain WHY the change should help (link to the anomaly)
 - Show the EXACT change as a unified diff inside <code_change> tags
+- Before writing each diff, verify that every symbol, type, and function you \
+reference actually exists in the provided source code. Your changes MUST compile.
 
 """ + CODE_CHANGE_FORMAT
 
@@ -381,17 +403,25 @@ class AgentPipeline:
         # --- Collect experiment data ---
         yield {"type": "status", "step": 0, "message": "Collecting experiment data..."}
 
-        # Convert absolute output_dir to relative for send_webhook compatibility
-        from pathlib import Path
-        _od = config.output_dir
-        if Path(_od).is_absolute():
-            try:
-                _od = str(Path(_od).relative_to(RESULT_DIR))
-            except ValueError:
-                pass
-        logs = send_webhook.collect_logs(_od, config.data_name)
+        # Use the shared _collect_logs which resolves absolute paths directly
+        from services.llm_service import _collect_logs
+        logs = _collect_logs(config.output_dir, config.data_name)
         summary = llm_analysis.summarize_logs(logs)
         formatted_summary = llm_analysis.format_summary(logs, summary)
+
+        # Report which files were found / missing so the user can see them
+        found = [k for k, v in logs.get("files", {}).items()
+                 if not v.startswith(("File not found", "Error"))]
+        missing = [k for k, v in logs.get("files", {}).items()
+                   if v.startswith(("File not found", "Error"))]
+        yield {
+            "type": "summary",
+            "text": formatted_summary,
+            "found_files": found,
+            "missing_files": missing,
+            "output_dir": config.output_dir,
+            "data_name": config.data_name,
+        }
 
         # --- Step 1: Anomaly Analysis ---
         yield {"type": "status", "step": 1, "message": "Analyzing experiment anomalies..."}

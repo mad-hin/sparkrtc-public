@@ -46,7 +46,11 @@ export default function Experiment() {
           appendLog(msg.source, msg.text)
         }
         if (msg.type === 'done') {
-          setStatus({ running: false, output_dir: outputDir, data_name: filePath })
+          setStatus({
+            running: false,
+            output_dir: msg.output_dir ?? outputDir,
+            data_name: msg.data_name ?? filePath.replace(/^.*[\\/]/, '').replace(/\.yuv$/, ''),
+          })
         }
       } catch {
         appendLog('server', event.data)
@@ -54,7 +58,10 @@ export default function Experiment() {
     }
 
     ws.onclose = () => {
-      setStatus({ running: false, output_dir: outputDir, data_name: filePath })
+      const cur = useExperimentStore.getState().status
+      if (cur.running) {
+        setStatus({ ...cur, running: false })
+      }
     }
 
     try {

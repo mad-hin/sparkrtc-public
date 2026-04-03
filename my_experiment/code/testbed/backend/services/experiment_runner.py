@@ -89,9 +89,20 @@ class ExperimentRunner:
             self._running = False
             return
 
+        import shutil
         import process_video_qrcode
         import argparse
         import subprocess as _sp
+
+        # Clean previous results for this output_dir so stale data doesn't
+        # contaminate the new run.  (The comparison path — start_simple —
+        # writes to a separate compare_dir, so it is unaffected.)
+        result_dir = os.path.join(result_base, rel_output_dir)
+        for subdir in ("res", "rec"):
+            d = os.path.join(result_dir, subdir)
+            if os.path.isdir(d):
+                shutil.rmtree(d)
+                await self._broadcast("server", f"Cleared previous {subdir}/ in {rel_output_dir}\n")
 
         # Kill any leftover peerconnection processes from previous runs
         for proc_name in ["peerconnection_server", "peerconnection_localvideo"]:
@@ -132,7 +143,11 @@ class ExperimentRunner:
                 self._running = False
                 for ws in self._ws_clients:
                     try:
-                        await ws.send_text(json.dumps({"type": "done"}))
+                        await ws.send_text(json.dumps({
+                            "type": "done",
+                            "output_dir": self._output_dir,
+                            "data_name": self._data_name,
+                        }))
                     except Exception:
                         pass
 
