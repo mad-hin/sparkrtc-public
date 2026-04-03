@@ -269,7 +269,7 @@ void RtpSenderEgress::CompleteSendPacket(const Packet& compound_packet,
   options.last_packet_in_batch = last_in_batch;
   const bool send_success = SendPacketToNetwork(*packet, options, pacing_info);
 
-  // PROFIX: Log RTX and FEC packets for transport layer timeliness analysis (§4.4.2)
+  // Log RTX and FEC packets for transport layer timeliness analysis
   if (send_success && packet->packet_type().has_value()) {
     if (*packet->packet_type() == RtpPacketMediaType::kRetransmission &&
         packet->retransmitted_sequence_number().has_value()) {

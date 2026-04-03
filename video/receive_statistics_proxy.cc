@@ -790,7 +790,7 @@ void ReceiveStatisticsProxy::OnCompleteFrame(bool is_keyframe,
 }
 
 void ReceiveStatisticsProxy::OnDroppedFrames(uint32_t frames_dropped) {
-  // PROFIX: Log frame drop events for stall detection (§4.3)
+  // Log frame drop events for stall detection
   RTC_LOG(LS_INFO) << "FRAMES_DROPPED, time_us=" << rtc::TimeMicros()
                    << ", count=" << frames_dropped;
   // Can be called on either the decode queue or the worker thread

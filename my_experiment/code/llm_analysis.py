@@ -10,12 +10,12 @@ import numpy as np
 from openai import OpenAI
 
 SYSTEM_PROMPT = """\
-You are a WebRTC video streaming performance analyst implementing the PROFIX \
-framework for root-cause attribution of latency stalls. You analyse experiment \
+You are a WebRTC video streaming performance analyst specialising in \
+root-cause attribution of latency stalls. You analyse experiment \
 results from SparkRTC, a low-latency WebRTC fork. You receive per-frame and \
 per-packet instrumentation data covering the full encode-transport-decode pipeline.
 
-Follow PROFIX's top-down diagnosis: start at the application layer, then proceed \
+Follow a top-down diagnosis: start at the application layer, then proceed \
 to transport and network layers. Use counterfactual reasoning: for each anomaly, \
 verify (1) the component shows abnormal behavior, AND (2) the stall would not \
 occur if the component operated normally.
@@ -151,7 +151,7 @@ def _parse_webrtc_events(text):
     decode_starts = {}
     decode_durations = []
     packet_seqs = []
-    # PROFIX additions
+    # Extended instrumentation
     encoded_sizes = []
     frame_types = {"key": 0, "delta": 0}
     rtx_send_times = []
@@ -268,7 +268,7 @@ def _parse_webrtc_events(text):
             "seq_gaps": expected - len(seqs),
         }
 
-    # PROFIX: Encoded frame sizes
+    # Encoded frame sizes
     if encoded_sizes:
         arr = np.array(encoded_sizes)
         median = float(np.median(arr))
@@ -279,12 +279,12 @@ def _parse_webrtc_events(text):
             "overshoot_count": int(np.sum(arr > 3 * median)) if median > 0 else 0,
         }
 
-    # PROFIX: Frame capture intervals
+    # Frame capture intervals
     if len(capture_times) > 1:
         intervals = np.diff(capture_times)
         result["capture_intervals_us"] = _percentiles(intervals)
 
-    # PROFIX: RTX/FEC activity
+    # RTX/FEC activity
     if rtx_send_times:
         result["rtx_sends"] = {"count": len(rtx_send_times)}
     if fec_send_times:
@@ -292,7 +292,7 @@ def _parse_webrtc_events(text):
     if rtcp_recv_times:
         result["rtcp_receives"] = {"count": len(rtcp_recv_times)}
 
-    # PROFIX: Rate control changes
+    # Rate control changes
     if rate_changes:
         targets = [r["target_bps"] for r in rate_changes]
         result["rate_changes"] = {
@@ -301,7 +301,7 @@ def _parse_webrtc_events(text):
             "max_target_bps": max(targets),
         }
 
-    # PROFIX: Pacing delay (match enqueue → send by seq)
+    # Pacing delay (match enqueue → send by seq)
     pacing_delays = []
     for seq, enq_time in pacing_enqueue_times.items():
         if seq in packet_send_times:
@@ -312,7 +312,7 @@ def _parse_webrtc_events(text):
         arr = np.array(pacing_delays)
         result["pacing_delay_us"] = _percentiles(arr)
 
-    # PROFIX: Frames dropped
+    # Frames dropped
     if frames_dropped_total > 0:
         result["frames_dropped"] = frames_dropped_total
 

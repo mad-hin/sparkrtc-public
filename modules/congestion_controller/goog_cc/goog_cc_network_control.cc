@@ -670,7 +670,7 @@ void GoogCcNetworkController::MaybeTriggerOnNetworkChanged(
       (round_trip_time != last_estimated_round_trip_time_) ||
       (pushback_target_rate != last_pushback_target_rate_) ||
       (stable_target_rate != last_stable_target_rate_)) {
-    // PROFIX: Log every rate change event for timeliness analysis (§4.4.2)
+    // Log every rate change event for timeliness analysis
     RTC_LOG(LS_INFO) << "RATE_CHANGE, time_us=" << at_time.us()
                      << ", target_bps=" << loss_based_target_rate.bps()
                      << ", prev_target_bps=" << last_loss_based_target_rate_.bps()

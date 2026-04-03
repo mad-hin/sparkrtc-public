@@ -2217,7 +2217,7 @@ EncodedImageCallback::Result VideoStreamEncoder::OnEncodedImage(
   // the pointer will still be valid when run on the task queue, set it to null.
   DataSize frame_size = DataSize::Bytes(image_copy.size());
 
-  // PROFIX: Log encoded frame details for overshoot detection (§4.3.2)
+  // Log encoded frame details for overshoot detection
   RTC_LOG(LS_INFO) << "FRAME_ENCODED, frame_id=" << image_copy.RtpTimestamp()
                    << ", encoded_time_us=" << clock_->CurrentTime().us()
                    << ", encoded_size=" << image_copy.size()

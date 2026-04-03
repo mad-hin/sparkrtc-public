@@ -222,7 +222,7 @@ void PacingController::EnqueuePacket(std::unique_ptr<RtpPacketToSend> packet) {
     }
     UpdateBudgetWithElapsedTime(UpdateTimeAndGetElapsed(target_process_time));
   }
-  // PROFIX: Log pacing queue enqueue for delay analysis (§4.4.2)
+  // Log pacing queue enqueue for delay analysis
   RTC_LOG(LS_INFO) << "PACING_ENQUEUE, seq=" << packet->SequenceNumber()
                    << ", enqueue_time_us=" << now.us()
                    << ", size=" << packet->payload_size()
