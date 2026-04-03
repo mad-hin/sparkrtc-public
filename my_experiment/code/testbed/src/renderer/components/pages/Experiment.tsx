@@ -18,7 +18,7 @@ export default function Experiment() {
   const [width, setWidth] = useState(1920)
   const [height, setHeight] = useState(1080)
   const [fps, setFps] = useState(24)
-  const [outputDir, setOutputDir] = useState('default_run/output_1')
+  const [outputDir, setOutputDir] = useState(status.output_dir || 'default_run/output_1')
   const [activeTab, setActiveTab] = useState<'server' | 'sender' | 'receiver'>('server')
   const logRef = useRef<HTMLPreElement>(null)
   const wsRef = useRef<WebSocket | null>(null)

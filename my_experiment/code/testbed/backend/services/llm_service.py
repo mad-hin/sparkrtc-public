@@ -7,7 +7,20 @@ from pathlib import Path
 
 import send_webhook
 import llm_analysis
+from services.log_collector import RESULT_DIR
 from services.file_reader import read_relevant_sources
+
+
+def _collect_logs(output_dir: str, data_name: str) -> dict:
+    """Collect logs, converting absolute output_dir to relative for send_webhook."""
+    from pathlib import Path
+    p = Path(output_dir)
+    if p.is_absolute():
+        try:
+            output_dir = str(p.relative_to(RESULT_DIR))
+        except ValueError:
+            pass
+    return send_webhook.collect_logs(output_dir, data_name)
 
 CODE_AGENT_SYSTEM_PROMPT = """\
 You are a WebRTC video streaming performance analyst AND code improvement agent.
@@ -44,7 +57,7 @@ Rules:
 
 def get_summary(output_dir: str, data_name: str) -> str:
     """Get formatted summary of experiment logs."""
-    logs = send_webhook.collect_logs(output_dir, data_name)
+    logs = _collect_logs(output_dir, data_name)
     summary = llm_analysis.summarize_logs(logs)
     return llm_analysis.format_summary(logs, summary)
 
@@ -58,7 +71,7 @@ async def stream_analysis(
     """Stream LLM analysis using existing llm_analysis module."""
     import asyncio
 
-    logs = send_webhook.collect_logs(output_dir, data_name)
+    logs = _collect_logs(output_dir, data_name)
     summary = llm_analysis.summarize_logs(logs)
     formatted = llm_analysis.format_summary(logs, summary)
 
@@ -116,7 +129,7 @@ async def stream_code_agent(
         )
     else:
         # Full analysis mode
-        logs = send_webhook.collect_logs(output_dir, data_name)
+        logs = _collect_logs(output_dir, data_name)
         summary = llm_analysis.summarize_logs(logs)
         formatted = llm_analysis.format_summary(logs, summary)
         source_excerpts = read_relevant_sources()

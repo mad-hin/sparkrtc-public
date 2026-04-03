@@ -8,6 +8,7 @@ from typing import AsyncIterator
 import send_webhook
 import llm_analysis
 from openai import OpenAI
+from services.log_collector import RESULT_DIR
 from services.config import get_repo_path
 from services.file_reader import (
     read_relevant_sources,
@@ -380,7 +381,15 @@ class AgentPipeline:
         # --- Collect experiment data ---
         yield {"type": "status", "step": 0, "message": "Collecting experiment data..."}
 
-        logs = send_webhook.collect_logs(config.output_dir, config.data_name)
+        # Convert absolute output_dir to relative for send_webhook compatibility
+        from pathlib import Path
+        _od = config.output_dir
+        if Path(_od).is_absolute():
+            try:
+                _od = str(Path(_od).relative_to(RESULT_DIR))
+            except ValueError:
+                pass
+        logs = send_webhook.collect_logs(_od, config.data_name)
         summary = llm_analysis.summarize_logs(logs)
         formatted_summary = llm_analysis.format_summary(logs, summary)
 

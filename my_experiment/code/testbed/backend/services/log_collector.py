@@ -34,13 +34,25 @@ def load_timestamp_logs(output_dir: str, data_name: str) -> list[dict]:
     return logs
 
 
+def _to_relative(output_dir: str) -> str:
+    """Convert an absolute output_dir back to a path relative to RESULT_DIR."""
+    p = Path(output_dir)
+    if p.is_absolute():
+        try:
+            return str(p.relative_to(RESULT_DIR))
+        except ValueError:
+            return output_dir
+    return output_dir
+
+
 def get_figure_paths(output_dir: str, data_name: str) -> list[str]:
     """Return list of figure paths relative to result dir."""
     fig_dir = RESULT_DIR / output_dir / "res" / data_name / "fig"
     if not fig_dir.exists():
         return []
+    rel = _to_relative(output_dir)
     return [
-        f"/static/results/{output_dir}/res/{data_name}/fig/{f.name}"
+        f"/static/results/{rel}/res/{data_name}/fig/{f.name}"
         for f in sorted(fig_dir.glob("*.png"))
     ]
 

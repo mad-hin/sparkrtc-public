@@ -406,7 +406,14 @@ export default function CodeAgent() {
           {/* Analysis markdown */}
           {store.analysisMarkdown && (
             <div className="bg-surface-secondary border border-slate-700 rounded-xl p-4">
-              <MarkdownRenderer content={store.analysisMarkdown} />
+              <MarkdownRenderer content={
+                store.analysisMarkdown
+                  .replace(/<files_needed>[\s\S]*?<\/files_needed>/g, '')
+                  .replace(/<files_needed>[\s\S]*$/g, '')
+                  .replace(/<code_change[\s\S]*?<\/code_change>/g, '')
+                  .replace(/<code_change[\s\S]*$/g, '')
+                  .trim()
+              } />
               {store.streaming && (
                 <span className="inline-block w-2 h-4 bg-accent animate-pulse ml-0.5" />
               )}

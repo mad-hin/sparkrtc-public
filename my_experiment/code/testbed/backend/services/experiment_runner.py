@@ -44,20 +44,29 @@ class ExperimentRunner:
     async def start(self, req: ExperimentRequest):
         self._running = True
 
-        # output_dir must be a relative path like "trace_name/output_1"
-        output_dir = req.output_dir.strip() if req.output_dir else ""
-        if os.path.isabs(output_dir):
-            parts = Path(output_dir).parts
-            output_dir = "/".join(parts[-2:]) if len(parts) >= 2 else parts[-1] if parts else ""
-        if not output_dir or "/" not in output_dir:
-            output_dir = "default_run/output_1"
+        repo_root = get_repo_path()
+        result_base = os.path.join(repo_root, "my_experiment", "result")
+        code_dir = os.path.join(repo_root, "my_experiment", "code")
 
-        self._output_dir = output_dir
+        # Normalise output_dir → keep a relative version for process_video_qrcode
+        # and store the absolute path for every other consumer.
+        raw = req.output_dir.strip() if req.output_dir else ""
+        if os.path.isabs(raw):
+            if raw.startswith(result_base):
+                rel_output_dir = os.path.relpath(raw, result_base)
+            else:
+                parts = Path(raw).parts
+                rel_output_dir = "/".join(parts[-2:]) if len(parts) >= 2 else parts[-1] if parts else ""
+        else:
+            rel_output_dir = raw
+
+        if not rel_output_dir or "/" not in rel_output_dir:
+            rel_output_dir = "default_run/output_1"
+
+        # Store absolute path so all downstream consumers get a stable reference
+        self._output_dir = os.path.join(result_base, rel_output_dir)
         data_name = Path(req.file_path).stem
         self._data_name = data_name
-
-        repo_root = get_repo_path()
-        code_dir = os.path.join(repo_root, "my_experiment", "code")
 
         # Pre-flight checks
         server_bin = os.path.join(repo_root, "out", "Default", "peerconnection_server")
@@ -93,13 +102,13 @@ class ExperimentRunner:
             width=req.width,
             height=req.height,
             fps=req.fps,
-            output_dir=output_dir,
+            output_dir=rel_output_dir,
         )
 
         async def _run():
             try:
                 loop = asyncio.get_event_loop()
-                await self._broadcast("server", f"Starting experiment: data={data_name}, output={output_dir}\n")
+                await self._broadcast("server", f"Starting experiment: data={data_name}, output={self._output_dir}\n")
                 await self._broadcast("server", f"Using binaries from {repo_root}/out/Default/\n")
 
                 # Use the original send_and_recv_video which handles all process
