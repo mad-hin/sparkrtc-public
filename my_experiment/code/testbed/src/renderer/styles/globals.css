@@ -25,3 +25,60 @@
   border-radius: 0.5rem;
   padding: 1rem !important;
 }
+
+/* Improve markdown readability in prose sections */
+.prose {
+  line-height: 1.8;
+}
+.prose h1, .prose h2, .prose h3 {
+  margin-top: 1.8em;
+  margin-bottom: 0.8em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #334155;
+}
+.prose h1 { font-size: 1.5em; }
+.prose h2 { font-size: 1.25em; }
+.prose h3 { font-size: 1.1em; border-bottom: none; }
+.prose p {
+  margin-top: 0.8em;
+  margin-bottom: 0.8em;
+}
+.prose ul, .prose ol {
+  margin-top: 0.6em;
+  margin-bottom: 0.6em;
+  padding-left: 1.5em;
+}
+.prose li {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+}
+.prose li > p {
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+}
+.prose strong {
+  color: #e2e8f0;
+}
+.prose blockquote {
+  border-left: 3px solid #3b82f6;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #94a3b8;
+}
+.prose code:not(pre code) {
+  background: #1e293b;
+  padding: 0.15em 0.4em;
+  border-radius: 0.25em;
+  font-size: 0.85em;
+  color: #e2e8f0;
+}
+.prose pre {
+  margin: 1em 0;
+}
+.prose hr {
+  border-color: #334155;
+  margin: 1.5em 0;
+}
+.prose > *:first-child {
+  margin-top: 0;
+}

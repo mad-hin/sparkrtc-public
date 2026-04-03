@@ -1,7 +1,7 @@
 """Build service: ninja build orchestration with streaming output."""
 
 import asyncio
-import subprocess
+import time
 from typing import AsyncIterator
 from pathlib import Path
 from services.config import get_repo_path
@@ -12,7 +12,7 @@ class BuildService:
         self._process: asyncio.subprocess.Process | None = None
 
     async def run_build(self) -> AsyncIterator[dict]:
-        """Run ninja build, yielding output lines."""
+        """Run ninja build, yielding batched output."""
         repo = Path(get_repo_path())
         build_dir = repo / "out" / "Default"
         targets = ["peerconnection_localvideo", "peerconnection_server"]
@@ -25,9 +25,21 @@ class BuildService:
             cwd=str(repo),
         )
 
+        # Batch output lines — send every 200ms instead of per-line
+        buffer = []
+        last_flush = time.monotonic()
+
         async for line in self._process.stdout:
-            text = line.decode(errors="replace")
-            yield {"output": text}
+            buffer.append(line.decode(errors="replace"))
+            now = time.monotonic()
+            if now - last_flush >= 0.2 or len(buffer) >= 50:
+                yield {"output": "".join(buffer)}
+                buffer.clear()
+                last_flush = now
+
+        # Flush remaining
+        if buffer:
+            yield {"output": "".join(buffer)}
 
         await self._process.wait()
         success = self._process.returncode == 0

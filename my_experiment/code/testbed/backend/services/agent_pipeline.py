@@ -343,6 +343,37 @@ class AgentPipeline:
             api_key=config.api_key,
         )
         use_thinking = _supports_thinking(config.model)
+
+        # --- Fix-build shortcut: skip full pipeline, only send build errors ---
+        if config.mode == "fix-build" and config.build_output:
+            yield {"type": "status", "step": 3, "message": "Analyzing build errors..."}
+
+            truncated = config.build_output[-3000:] if len(config.build_output) > 3000 else config.build_output
+            system = MERGED_STEP2_3_SYSTEM
+            user_content = (
+                f"## Build Error Output\n```\n{truncated}\n```\n\n"
+                "The previous patches failed to compile. Analyze the compiler errors "
+                "and provide corrected patches. Only output the fixed <code_change> blocks.\n"
+            )
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_content},
+            ]
+
+            full_text = ""
+            async for msg_type, text in _stream_llm(client, config.model, messages, use_thinking):
+                if msg_type == "__full__":
+                    full_text = text
+                elif msg_type == "thinking":
+                    yield {"type": "thinking", "chunk": text}
+                else:
+                    yield {"type": "analysis", "chunk": text}
+
+            for suggestion in _parse_code_changes(full_text):
+                yield suggestion
+            return
+
+        # --- Full analysis pipeline ---
         budget = TokenBudget(config.context_length)
         max_lines = _max_lines_for_budget(config.context_length)
 

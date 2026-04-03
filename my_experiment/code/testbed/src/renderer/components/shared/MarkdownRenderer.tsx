@@ -201,7 +201,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
   const segments = useMemo(() => parseContent(content), [content])
   
   return (
-    <div className={`prose prose-invert prose-sm max-w-none ${className}`}>
+    <div className={`prose prose-invert prose-base max-w-none ${className}`}>
       {segments.map((segment, i) => (
         <React.Fragment key={i}>
           {segment.type === 'markdown' ? (
