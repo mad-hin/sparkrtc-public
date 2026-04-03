@@ -36,6 +36,7 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(comparison.router, prefix="/api/comparison", tags=["comparison"])
 
 # Serve result figures as static files
-result_dir = Path(__file__).resolve().parent.parent.parent / "result"
+# __file__ = testbed/backend/app.py → 4 parents up = my_experiment/
+result_dir = Path(__file__).resolve().parent.parent.parent.parent / "result"
 if result_dir.exists():
     app.mount("/static/results", StaticFiles(directory=str(result_dir)), name="results")
