@@ -1,7 +1,10 @@
 """Analysis endpoints: LLM analysis streaming."""
 
 import json
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+logger = logging.getLogger("uvicorn.error")
 from models.schemas import AnalysisRequest
 from services.llm_service import stream_analysis, get_summary
 
@@ -20,6 +23,7 @@ async def ws_analysis_stream(ws: WebSocket):
     try:
         data = await ws.receive_text()
         req = json.loads(data)
+        logger.info(f"[analysis] model={req.get('model', '?')}")
 
         async for chunk in stream_analysis(
             output_dir=req["output_dir"],

@@ -1,7 +1,10 @@
 """Code agent endpoints: analyze, suggest, patch, build, run."""
 
 import json
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+logger = logging.getLogger("uvicorn.error")
 from models.schemas import ApplyPatchesRequest
 from services.agent_pipeline import AgentPipeline, AgentConfig
 from services.git_service import GitService
@@ -18,6 +21,8 @@ async def ws_agent_stream(ws: WebSocket):
     try:
         data = await ws.receive_text()
         req = json.loads(data)
+
+        logger.info(f"[agent] model={req.get('model', '?')}, mode={req.get('type', 'analyze')}, context={req.get('context_length', '?')}")
 
         pipeline = AgentPipeline()
         config = AgentConfig(
