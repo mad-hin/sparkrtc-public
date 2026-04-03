@@ -10,49 +10,83 @@ import numpy as np
 from openai import OpenAI
 
 SYSTEM_PROMPT = """\
-You are a WebRTC video streaming performance analyst. You analyse experiment \
-results from SparkRTC, a low-latency WebRTC fork. You receive summary \
-statistics from per-frame instrumentation AND periodic WebRTC getStats() \
-snapshots covering the full encode-transport-decode pipeline.
+You are a WebRTC video streaming performance analyst implementing the PROFIX \
+framework for root-cause attribution of latency stalls. You analyse experiment \
+results from SparkRTC, a low-latency WebRTC fork. You receive per-frame and \
+per-packet instrumentation data covering the full encode-transport-decode pipeline.
 
-Structure your analysis by layer, checking for these specific anomaly types:
+Follow PROFIX's top-down diagnosis: start at the application layer, then proceed \
+to transport and network layers. Use counterfactual reasoning: for each anomaly, \
+verify (1) the component shows abnormal behavior, AND (2) the stall would not \
+occur if the component operated normally.
 
-## Network Layer
-- **Latency Abnormal**: RTT p95 >100ms or high variance; end-to-end delay >200ms
-- **Loss Abnormal**: packet loss rate >1%; sequence number gaps; fractionLost >0.02
+## Application Layer Diagnosis (check first)
 
-## Transport Layer
-- **RTX (retransmission)**: retransmittedPacketsSent >0 indicates loss recovery is active; \
-high retransmission ratio suggests persistent loss
-- **FEC**: fecPacketsSent >0 means forward error correction is active; \
-high fecPacketsDiscarded suggests FEC overhead without benefit
-- **Rate Control — Late Response**: delay between congestion signal and bitrate drop; \
-targetBitrate stays high while loss increases
-- **Rate Control — Insufficient Degree**: targetBitrate drops but not enough to match \
-available bandwidth; persistent loss after adaptation
+### Frame Interval Anomaly
+- FRAME_CAPTURE interval exceeds target by >10% (e.g., >36.6ms for 30fps)
+- Counterfactual: would normal frame interval eliminate the stall?
 
-## Application Layer
-- **Capturer — Frame Interval Anomaly**: FRAME_CAPTURE interval stddev >20% of expected; \
-irregular frame production
-- **Codec — Frame Size Overshoots**: encoded frame >3x median size; I-frame bursts
-- **Codec — Coding Queuing**: FRAME_CAPTURE to FRAME_ENCODE_START gap >10ms
-- **Codec — Coding Blockage**: encode duration >2x median; qualityLimitationReason=cpu
+### Encoding Overshoot
+- Encoded frame size > target size by >20% (overshoot ratio)
+- Transmission time > 1.5x expected at target rate
+- Counterfactual: would target-sized frame arrive on time?
+
+### Coding Queuing
+- FRAME_CAPTURE to FRAME_ENCODE_START gap > 10ms (queue > 3 frames at 30fps)
+- OR encoding time exceeds 2x target (>66ms for 30fps)
+
+### Coding Blockage
+- Encode duration > 2x median; qualityLimitationReason=cpu
+
+## Network Layer Diagnosis (§4.4.1 — Latency vs Loss inference)
+Use per-packet send/receive timestamps to infer:
+- t_latency: time of each latency rise (OWD > 1.2x baseline)
+- t_loss: send time of each lost packet (missing seq on receiver)
+- If t_latency < t_loss → **Latency Abnormal** (congestion-driven)
+- If t_latency >= t_loss → **Loss Abnormal** (non-congestion, e.g., link noise)
+
+## Transport Layer Diagnosis (§4.4.2 — Response Timeliness & Sufficiency)
+
+### Rate Control Evaluation
+- Timely Response: time from latency rise to first rate reduction < RTT + 50ms
+- Sufficiency: post-response latency must decrease >10% within 2xRTT
+- Room for Response: post-response rate > minimum useful rate (e.g., 100kbps)
+- If late → **Rate Control Late Response**; if insufficient → **Rate Control Insufficient Degree**
+
+### RTX/FEC Evaluation
+- Timely Response: time from loss to first RTX/FEC packet < RTT + 50ms
+- Sufficiency: post-response loss rate decrease >20% within 1xRTT
+- If late → **RTX/FEC Late**; if insufficient → **RTX/FEC Insufficient**
+
+### RTCP Timeliness
+- Transport response must occur < RTCP receive time + reaction granularity + 50ms
+- If not → **RTCP Abnormality**
+
+## Available Instrumentation Data
+- FRAME_CAPTURE, FRAME_ENCODE_START, FRAME_ENCODE_END, FRAME_ENCODED (with size, type)
+- PACKET_SEND, PACKET_RECEIVE (with seq, timestamp)
+- RTX_SEND (per-packet retransmission timestamps)
+- FEC_SEND (per-packet FEC timestamps)
+- RTCP_RECEIVE (RTCP arrival timestamps)
+- RATE_CHANGE (per-event bitrate changes with RTT, loss)
+- PACING_ENQUEUE (pacing queue entry timestamps)
+- FRAMES_DROPPED (frame drop events)
+- WEBRTC_STATS (periodic getStats() snapshots)
 
 For each anomaly found:
 1. State the anomaly type and which layer it belongs to
-2. Show the evidence (specific metric values)
-3. Diagnose the root cause
-4. Recommend a fix
+2. Show the evidence (specific metric values from the data)
+3. Apply counterfactual reasoning to confirm root cause
+4. Recommend a specific fix
 
 Metric reference:
 - Delay (ms): <100 excellent, 100-200 acceptable, >200 problematic
 - SSIM (0-1): >0.95 excellent, 0.90-0.95 good, <0.90 visible degradation
 - PSNR (dB): >40 excellent, 30-40 good, <30 poor
 - RTT (s): <0.05 excellent, 0.05-0.15 acceptable, >0.15 high
-- Jitter (s): <0.01 good, >0.03 problematic
 
 Rate the result 1-5 for: latency, quality, stability. \
-Be concise but thorough. Highlight the most important findings first.\
+Highlight the most important findings first.\
 """
 
 
@@ -104,17 +138,30 @@ def _count_below(arr, thresholds):
 def _parse_webrtc_events(text):
     """Count event types and extract timing from raw WebRTC log."""
     event_types = [
-        "FRAME_CAPTURE", "FRAME_ENCODE_START", "FRAME_ENCODE_END",
+        "FRAME_CAPTURE", "FRAME_ENCODE_START", "FRAME_ENCODE_END", "FRAME_ENCODED",
         "PACKET_SEND", "PACKET_RECEIVE", "FRAME_DECODE_START", "FRAME_DECODE_END",
+        "RTX_SEND", "FEC_SEND", "RTCP_RECEIVE", "RATE_CHANGE",
+        "FRAMES_DROPPED", "PACING_ENQUEUE",
     ]
     counts = {e: 0 for e in event_types}
-    kv_re = re.compile(r"(\w+)=([-\d]+)")
+    kv_re = re.compile(r"(\w+)=([-\w.]+)")
 
     encode_starts = {}
     encode_durations = []
     decode_starts = {}
     decode_durations = []
     packet_seqs = []
+    # PROFIX additions
+    encoded_sizes = []
+    frame_types = {"key": 0, "delta": 0}
+    rtx_send_times = []
+    fec_send_times = []
+    rtcp_recv_times = []
+    rate_changes = []
+    pacing_enqueue_times = {}  # seq -> enqueue_time_us
+    packet_send_times = {}     # seq -> send_time_us
+    frames_dropped_total = 0
+    capture_times = []
 
     for line in text.splitlines():
         for et in event_types:
@@ -123,7 +170,11 @@ def _parse_webrtc_events(text):
                 idx = line.index(et)
                 kv = dict(kv_re.findall(line[idx:]))
 
-                if et == "FRAME_ENCODE_START":
+                if et == "FRAME_CAPTURE":
+                    ts = kv.get("capture_time_us")
+                    if ts:
+                        capture_times.append(int(ts))
+                elif et == "FRAME_ENCODE_START":
                     fid = kv.get("frame_id") or kv.get("rtp_ts")
                     ts = kv.get("encode_start_us")
                     if fid and ts:
@@ -133,6 +184,13 @@ def _parse_webrtc_events(text):
                     ts = kv.get("encode_end_us")
                     if fid and ts and fid in encode_starts:
                         encode_durations.append(int(ts) - encode_starts[fid])
+                elif et == "FRAME_ENCODED":
+                    sz = kv.get("encoded_size")
+                    ft = kv.get("frame_type")
+                    if sz:
+                        encoded_sizes.append(int(sz))
+                    if ft in frame_types:
+                        frame_types[ft] += 1
                 elif et == "FRAME_DECODE_START":
                     fid = kv.get("frame_id") or kv.get("rtp_ts")
                     ts = kv.get("decode_start_us")
@@ -143,10 +201,48 @@ def _parse_webrtc_events(text):
                     ts = kv.get("decode_end_us")
                     if fid and ts and fid in decode_starts:
                         decode_durations.append(int(ts) - decode_starts[fid])
-                elif et in ("PACKET_SEND", "PACKET_RECEIVE"):
+                elif et == "PACKET_SEND":
+                    seq = kv.get("seq")
+                    ts = kv.get("send_time_us")
+                    if seq:
+                        packet_seqs.append(int(seq))
+                    if seq and ts:
+                        packet_send_times[int(seq)] = int(ts)
+                elif et == "PACKET_RECEIVE":
                     seq = kv.get("seq")
                     if seq:
                         packet_seqs.append(int(seq))
+                elif et == "RTX_SEND":
+                    ts = kv.get("send_time_us")
+                    if ts:
+                        rtx_send_times.append(int(ts))
+                elif et == "FEC_SEND":
+                    ts = kv.get("send_time_us")
+                    if ts:
+                        fec_send_times.append(int(ts))
+                elif et == "RTCP_RECEIVE":
+                    ts = kv.get("recv_time_us")
+                    if ts:
+                        rtcp_recv_times.append(int(ts))
+                elif et == "RATE_CHANGE":
+                    ts = kv.get("time_us")
+                    target = kv.get("target_bps")
+                    prev = kv.get("prev_target_bps")
+                    if ts and target:
+                        rate_changes.append({
+                            "time_us": int(ts),
+                            "target_bps": int(target),
+                            "prev_bps": int(prev) if prev else 0,
+                        })
+                elif et == "FRAMES_DROPPED":
+                    cnt = kv.get("count")
+                    if cnt:
+                        frames_dropped_total += int(cnt)
+                elif et == "PACING_ENQUEUE":
+                    seq = kv.get("seq")
+                    ts = kv.get("enqueue_time_us")
+                    if seq and ts:
+                        pacing_enqueue_times[int(seq)] = int(ts)
                 break
 
     result = {"event_counts": counts}
@@ -171,6 +267,54 @@ def _parse_webrtc_events(text):
             "expected_packets": expected,
             "seq_gaps": expected - len(seqs),
         }
+
+    # PROFIX: Encoded frame sizes
+    if encoded_sizes:
+        arr = np.array(encoded_sizes)
+        median = float(np.median(arr))
+        result["encoded_frame_sizes"] = {
+            **_percentiles(arr),
+            "key_frames": frame_types["key"],
+            "delta_frames": frame_types["delta"],
+            "overshoot_count": int(np.sum(arr > 3 * median)) if median > 0 else 0,
+        }
+
+    # PROFIX: Frame capture intervals
+    if len(capture_times) > 1:
+        intervals = np.diff(capture_times)
+        result["capture_intervals_us"] = _percentiles(intervals)
+
+    # PROFIX: RTX/FEC activity
+    if rtx_send_times:
+        result["rtx_sends"] = {"count": len(rtx_send_times)}
+    if fec_send_times:
+        result["fec_sends"] = {"count": len(fec_send_times)}
+    if rtcp_recv_times:
+        result["rtcp_receives"] = {"count": len(rtcp_recv_times)}
+
+    # PROFIX: Rate control changes
+    if rate_changes:
+        targets = [r["target_bps"] for r in rate_changes]
+        result["rate_changes"] = {
+            "count": len(rate_changes),
+            "min_target_bps": min(targets),
+            "max_target_bps": max(targets),
+        }
+
+    # PROFIX: Pacing delay (match enqueue → send by seq)
+    pacing_delays = []
+    for seq, enq_time in pacing_enqueue_times.items():
+        if seq in packet_send_times:
+            delay = packet_send_times[seq] - enq_time
+            if delay >= 0:
+                pacing_delays.append(delay)
+    if pacing_delays:
+        arr = np.array(pacing_delays)
+        result["pacing_delay_us"] = _percentiles(arr)
+
+    # PROFIX: Frames dropped
+    if frames_dropped_total > 0:
+        result["frames_dropped"] = frames_dropped_total
 
     return result
 

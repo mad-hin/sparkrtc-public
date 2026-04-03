@@ -24,6 +24,17 @@ ANOMALY_FILES = {
         "modules/video_coding/jitter_buffer_common.h",
         "modules/video_coding/timing/timing.cc",
     ],
+    "rtx": [
+        "modules/rtp_rtcp/source/rtp_sender.cc",
+        "modules/rtp_rtcp/source/rtp_sender_egress.cc",
+    ],
+    "fec": [
+        "modules/rtp_rtcp/source/ulpfec_generator.cc",
+        "modules/rtp_rtcp/source/rtp_sender_video.cc",
+    ],
+    "pacing": [
+        "modules/pacing/pacing_controller.cc",
+    ],
 }
 
 # One-line descriptions of common WebRTC files (helps LLM choose which to read)

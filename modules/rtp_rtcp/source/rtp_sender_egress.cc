@@ -269,6 +269,21 @@ void RtpSenderEgress::CompleteSendPacket(const Packet& compound_packet,
   options.last_packet_in_batch = last_in_batch;
   const bool send_success = SendPacketToNetwork(*packet, options, pacing_info);
 
+  // PROFIX: Log RTX and FEC packets for transport layer timeliness analysis (§4.4.2)
+  if (send_success && packet->packet_type().has_value()) {
+    if (*packet->packet_type() == RtpPacketMediaType::kRetransmission &&
+        packet->retransmitted_sequence_number().has_value()) {
+      RTC_LOG(LS_INFO) << "RTX_SEND, rtx_seq=" << packet->SequenceNumber()
+                       << ", orig_seq=" << *packet->retransmitted_sequence_number()
+                       << ", send_time_us=" << now.us()
+                       << ", size=" << packet->size();
+    } else if (*packet->packet_type() == RtpPacketMediaType::kForwardErrorCorrection) {
+      RTC_LOG(LS_INFO) << "FEC_SEND, seq=" << packet->SequenceNumber()
+                       << ", send_time_us=" << now.us()
+                       << ", size=" << packet->size();
+    }
+  }
+
   // Put packet in retransmission history or update pending status even if
   // actual sending fails.
   if (is_media && packet->allow_retransmission()) {

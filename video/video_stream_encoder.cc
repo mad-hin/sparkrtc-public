@@ -1136,7 +1136,7 @@ void VideoStreamEncoder::ReconfigureEncoder() {
       }
     }
   }
-  
+
   ApplyEncoderBitrateLimitsIfSingleActiveStream(
       GetEncoderInfoWithBitrateLimitUpdate(
           encoder_->GetEncoderInfo(), encoder_config_, default_limits_allowed_),
@@ -2216,6 +2216,16 @@ EncodedImageCallback::Result VideoStreamEncoder::OnEncodedImage(
   // encoded data itself, to the post encode function. Since we cannot be sure
   // the pointer will still be valid when run on the task queue, set it to null.
   DataSize frame_size = DataSize::Bytes(image_copy.size());
+
+  // PROFIX: Log encoded frame details for overshoot detection (§4.3.2)
+  RTC_LOG(LS_INFO) << "FRAME_ENCODED, frame_id=" << image_copy.RtpTimestamp()
+                   << ", encoded_time_us=" << clock_->CurrentTime().us()
+                   << ", encoded_size=" << image_copy.size()
+                   << ", frame_type=" << (image_copy._frameType == VideoFrameType::kVideoFrameKey ? "key" : "delta")
+                   << ", width=" << image_copy._encodedWidth
+                   << ", height=" << image_copy._encodedHeight
+                   << ", qp=" << image_copy.qp_;
+
   image_copy.ClearEncodedData();
 
   int temporal_index = 0;

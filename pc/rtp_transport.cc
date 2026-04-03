@@ -249,6 +249,9 @@ void RtpTransport::OnRtpPacketReceived(rtc::CopyOnWriteBuffer packet,
 
 void RtpTransport::OnRtcpPacketReceived(rtc::CopyOnWriteBuffer packet,
                                         int64_t packet_time_us) {
+  // PROFIX: Log RTCP receive timestamps for timeliness analysis (§4.4.2)
+  RTC_LOG(LS_INFO) << "RTCP_RECEIVE, recv_time_us=" << packet_time_us
+                   << ", size=" << packet.size();
   SendRtcpPacketReceived(&packet, packet_time_us);
 }
 
