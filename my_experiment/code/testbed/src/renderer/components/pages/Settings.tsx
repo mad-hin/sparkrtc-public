@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { Save, Trash2, Eye, EyeOff, RefreshCw, Sun, Moon, FolderOpen } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
+import Toggle from '../shared/Toggle'
 
 export default function Settings() {
   const {
     apiKey,
     theme,
     repoPath,
+    debugMode,
     models,
     balance,
     loading,
@@ -14,6 +16,7 @@ export default function Settings() {
     clearApiKey,
     setTheme,
     setRepoPath,
+    setDebugMode,
     fetchModels,
     fetchBalance,
     loadSaved
@@ -213,6 +216,24 @@ export default function Settings() {
               Saved: <span className="font-mono text-slate-400">{repoPath}</span>
             </p>
           )}
+        </div>
+
+        {/* Debug Mode */}
+        <div className="bg-surface-secondary border border-slate-700 rounded-xl p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Debug Mode</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Show ground-truth anomaly labels alongside LLM analysis for accuracy validation.
+                Match experiments by naming output_dir with a scenario key
+                (e.g., <span className="font-mono text-slate-400">bandwidth_constrained</span>,{' '}
+                <span className="font-mono text-slate-400">packet_loss</span>,{' '}
+                <span className="font-mono text-slate-400">cpu_limited</span>,{' '}
+                <span className="font-mono text-slate-400">bursty_network</span>).
+              </p>
+            </div>
+            <Toggle checked={debugMode} onChange={setDebugMode} />
+          </div>
         </div>
 
         {/* Appearance */}

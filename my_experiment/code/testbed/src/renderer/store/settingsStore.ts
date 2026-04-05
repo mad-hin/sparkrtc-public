@@ -6,6 +6,7 @@ interface SettingsState {
   apiKey: string
   theme: 'dark' | 'light'
   repoPath: string
+  debugMode: boolean
   models: OpenRouterModel[]
   balance: OpenRouterBalance | null
   loading: boolean
@@ -14,6 +15,7 @@ interface SettingsState {
   clearApiKey: () => void
   setTheme: (theme: 'dark' | 'light') => void
   setRepoPath: (path: string) => void
+  setDebugMode: (v: boolean) => void
   fetchModels: () => Promise<void>
   fetchBalance: () => Promise<void>
   validateKey: (key: string) => Promise<boolean>
@@ -31,6 +33,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   apiKey: '',
   theme: 'dark',
   repoPath: '',
+  debugMode: true,
   models: [],
   balance: null,
   loading: false,
@@ -61,6 +64,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       method: 'POST',
       body: JSON.stringify({ repo_path: path })
     }).catch(() => {})
+  },
+
+  setDebugMode: (v: boolean) => {
+    set({ debugMode: v })
+    _save({ debugMode: v })
   },
 
   fetchModels: async () => {
@@ -109,6 +117,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadSaved: () => {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
     if (saved.apiKey) set({ apiKey: saved.apiKey })
+    set({ debugMode: saved.debugMode ?? true })
     if (saved.repoPath) {
       set({ repoPath: saved.repoPath })
       api('/api/settings/repo-path', {

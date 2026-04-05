@@ -29,6 +29,16 @@ export interface ExperimentConfig {
   height: number
   fps: number
   output_dir: string
+  // Network emulation
+  enable_mahimahi: boolean
+  trace_file: string
+  enable_loss_trace: boolean
+  delay_ms: number
+  // Server
+  server_ip: string
+  port: number
+  // Advanced
+  field_trials: string
 }
 
 export interface ExperimentStatus {

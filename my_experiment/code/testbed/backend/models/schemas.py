@@ -16,6 +16,16 @@ class ExperimentRequest(BaseModel):
     height: int = 1080
     fps: int = 24
     output_dir: str = ""
+    # Network emulation
+    enable_mahimahi: bool = False
+    trace_file: str = ""
+    enable_loss_trace: bool = False
+    delay_ms: int = 0  # Base one-way delay in ms (applied via mm-delay)
+    # Server
+    server_ip: str = "127.0.0.1"
+    port: int = 8888
+    # Advanced
+    field_trials: str = ""
 
 
 class AnalysisRequest(BaseModel):

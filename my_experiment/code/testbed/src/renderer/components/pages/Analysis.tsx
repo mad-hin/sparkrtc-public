@@ -1,5 +1,5 @@
-import React, { useRef } from 'react'
-import { BrainCircuit, Square, Trash2, Settings, KeyRound } from 'lucide-react'
+import React, { useRef, useMemo } from 'react'
+import { BrainCircuit, Square, Trash2, Settings, KeyRound, CheckCircle2, XCircle, Info } from 'lucide-react'
 import ModelSelector from '../shared/ModelSelector'
 import { useNavigate } from 'react-router-dom'
 import { useAnalysisStore } from '../../store/analysisStore'
@@ -8,6 +8,20 @@ import { useExperimentStore } from '../../store/experimentStore'
 import { createWebSocket } from '../../api/client'
 import { api } from '../../api/client'
 import MarkdownRenderer from '../shared/MarkdownRenderer'
+import { matchScenario, type ExpectedAnomaly } from '../../data/debugScenarios'
+
+function checkAnomalyFound(analysisText: string, label: string): boolean {
+  const lower = analysisText.toLowerCase()
+  // Check exact label match
+  if (lower.includes(label.toLowerCase())) return true
+  // Check partial matches for common LLM paraphrasing
+  const words = label.toLowerCase().split(/\s+/)
+  if (words.length >= 2) {
+    // Check if all significant words appear within a reasonable proximity
+    return words.every(w => lower.includes(w))
+  }
+  return false
+}
 
 export default function Analysis() {
   const {
@@ -22,10 +36,28 @@ export default function Analysis() {
     clear
   } = useAnalysisStore()
 
-  const { apiKey, models } = useSettingsStore()
+  const { apiKey, models, debugMode } = useSettingsStore()
   const { status: expStatus } = useExperimentStore()
   const wsRef = useRef<WebSocket | null>(null)
   const navigate = useNavigate()
+
+  const scenario = useMemo(() => {
+    if (!debugMode || !expStatus.output_dir) return null
+    return matchScenario(expStatus.output_dir)
+  }, [debugMode, expStatus.output_dir])
+
+  const validationResults = useMemo(() => {
+    if (!scenario || !analysisText || streaming) return null
+    const results = scenario.expectedAnomalies.map(a => ({
+      ...a,
+      found: checkAnomalyFound(analysisText, a.label)
+    }))
+    const primary = results.filter(r => r.severity === 'primary')
+    const primaryFound = primary.filter(r => r.found).length
+    const total = results.length
+    const totalFound = results.filter(r => r.found).length
+    return { results, primaryFound, primaryTotal: primary.length, totalFound, total }
+  }, [scenario, analysisText, streaming])
 
   const handleAnalyze = async () => {
     if (!apiKey || !expStatus.output_dir || !expStatus.data_name) return
@@ -107,6 +139,12 @@ export default function Analysis() {
         </div>
       </div>
     )
+  }
+
+  const layerColors: Record<string, string> = {
+    application: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+    network: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+    transport: 'bg-amber-500/20 text-amber-300 border-amber-500/30'
   }
 
   return (
@@ -199,6 +237,100 @@ export default function Analysis() {
           </div>
         </div>
       </div>
+
+      {/* Debug Mode: Ground Truth Validation */}
+      {debugMode && analysisText && !streaming && validationResults && scenario && (
+        <div className="mt-4 bg-surface-secondary border border-slate-700 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-white">Ground Truth Validation</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Scenario: <span className="text-slate-300">{scenario.name}</span>
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-xs text-slate-500">Primary Accuracy</p>
+                <p className={`text-lg font-bold ${
+                  validationResults.primaryFound === validationResults.primaryTotal
+                    ? 'text-emerald-400'
+                    : validationResults.primaryFound > 0 ? 'text-amber-400' : 'text-red-400'
+                }`}>
+                  {validationResults.primaryFound}/{validationResults.primaryTotal}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-500">Total</p>
+                <p className="text-lg font-bold text-slate-300">
+                  {validationResults.totalFound}/{validationResults.total}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="p-4">
+            <p className="text-xs text-slate-500 mb-3">{scenario.description}</p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-slate-500 border-b border-slate-700">
+                  <th className="text-left pb-2 font-medium">Expected Anomaly</th>
+                  <th className="text-left pb-2 font-medium">Layer</th>
+                  <th className="text-left pb-2 font-medium">Severity</th>
+                  <th className="text-center pb-2 font-medium">Found</th>
+                </tr>
+              </thead>
+              <tbody>
+                {validationResults.results.map((r, i) => (
+                  <tr key={i} className="border-b border-slate-700/50">
+                    <td className="py-2">
+                      <span className="text-slate-200">{r.label}</span>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{r.description}</p>
+                    </td>
+                    <td className="py-2">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded border ${layerColors[r.layer]}`}>
+                        {r.layer}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      <span className={`text-xs ${r.severity === 'primary' ? 'text-white font-medium' : 'text-slate-500'}`}>
+                        {r.severity}
+                      </span>
+                    </td>
+                    <td className="py-2 text-center">
+                      {r.found ? (
+                        <CheckCircle2 size={16} className="inline text-emerald-400" />
+                      ) : (
+                        <XCircle size={16} className={`inline ${r.severity === 'primary' ? 'text-red-400' : 'text-slate-600'}`} />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Debug Mode: No matching scenario info */}
+      {debugMode && analysisText && !streaming && !scenario && expStatus.output_dir && (
+        <div className="mt-4 bg-surface-secondary border border-slate-700 rounded-xl p-4">
+          <div className="flex items-start gap-2">
+            <Info size={16} className="text-slate-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs text-slate-400">
+                Debug mode is enabled but no matching scenario found for output directory{' '}
+                <span className="font-mono text-slate-300">{expStatus.output_dir}</span>.
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Use a recognized pattern in your output_dir:{' '}
+                <span className="font-mono text-slate-400">bandwidth_constrained</span>,{' '}
+                <span className="font-mono text-slate-400">packet_loss</span>,{' '}
+                <span className="font-mono text-slate-400">cpu_limited</span>,{' '}
+                <span className="font-mono text-slate-400">bursty_network</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -104,8 +104,17 @@ class ExperimentRunner:
                 shutil.rmtree(d)
                 await self._broadcast("server", f"Cleared previous {subdir}/ in {rel_output_dir}\n")
 
+        # Truncate cumulative statistics files so the analysis only sees
+        # data from this run, not all previous runs appended together.
+        stats_dir = os.path.join(repo_root, "my_experiment")
+        for fname in ("statistics.log", "statistics.csv"):
+            p = os.path.join(stats_dir, fname)
+            if os.path.exists(p):
+                open(p, "w").close()
+
         # Kill any leftover peerconnection processes from previous runs
-        for proc_name in ["peerconnection_server", "peerconnection_localvideo"]:
+        for proc_name in ["peerconnection_server", "peerconnection_localvideo",
+                         "mm-link", "mm-delay", "mm-loss-trace"]:
             _sp.run(["pkill", "-f", proc_name], capture_output=True)
 
         cfg = argparse.Namespace(
@@ -114,27 +123,84 @@ class ExperimentRunner:
             height=req.height,
             fps=req.fps,
             output_dir=rel_output_dir,
+            server_ip=req.server_ip,
+            port=req.port,
+            enable_mahimahi=req.enable_mahimahi,
+            trace_file=req.trace_file,
+            enable_loss_trace=req.enable_loss_trace,
+            delay_ms=req.delay_ms,
+            field_trials=req.field_trials,
         )
 
         async def _run():
             try:
+                import sys, threading
+
                 loop = asyncio.get_event_loop()
                 await self._broadcast("server", f"Starting experiment: data={data_name}, output={self._output_dir}\n")
                 await self._broadcast("server", f"Using binaries from {repo_root}/out/Default/\n")
 
-                # Use the original send_and_recv_video which handles all process
-                # spawning, log capture (send.log, recv.log), and post-processing.
-                # It must run with cwd=my_experiment/code/ because all its paths
-                # are relative to that directory.
+                # Capture subprocess output at the OS fd level so that child
+                # processes (ffmpeg, peerconnection_*) are captured too.
+                output_chunks: list[str] = []
+                capture_done = threading.Event()
+
                 def _run_experiment():
                     saved_cwd = os.getcwd()
+                    # Duplicate real fds so we can restore them
+                    saved_stdout_fd = os.dup(1)
+                    saved_stderr_fd = os.dup(2)
+                    read_fd, write_fd = os.pipe()
                     try:
+                        # Redirect fd 1 and 2 to our pipe
+                        os.dup2(write_fd, 1)
+                        os.dup2(write_fd, 2)
+                        os.close(write_fd)
+                        # Also redirect Python-level streams
+                        sys.stdout = os.fdopen(os.dup(1), 'w', buffering=1)
+                        sys.stderr = os.fdopen(os.dup(2), 'w', buffering=1)
+
+                        # Reader thread: pull from pipe into output_chunks
+                        def _reader():
+                            with os.fdopen(read_fd, 'r', errors='replace', buffering=1) as f:
+                                for line in f:
+                                    output_chunks.append(line)
+                            capture_done.set()
+
+                        reader = threading.Thread(target=_reader, daemon=True)
+                        reader.start()
+
                         os.chdir(code_dir)
                         process_video_qrcode.send_and_recv_video(cfg)
                     finally:
+                        # Restore original fds
+                        sys.stdout.close()
+                        sys.stderr.close()
+                        os.dup2(saved_stdout_fd, 1)
+                        os.dup2(saved_stderr_fd, 2)
+                        os.close(saved_stdout_fd)
+                        os.close(saved_stderr_fd)
+                        sys.stdout = sys.__stdout__
+                        sys.stderr = sys.__stderr__
                         os.chdir(saved_cwd)
 
-                await loop.run_in_executor(None, _run_experiment)
+                # Run experiment in thread, drain captured output to WebSocket
+                task = loop.run_in_executor(None, _run_experiment)
+
+                import asyncio as _aio
+                sent = 0
+                while not task.done() or (not capture_done.is_set()) or sent < len(output_chunks):
+                    if sent < len(output_chunks):
+                        batch = "".join(output_chunks[sent:])
+                        sent = len(output_chunks)
+                        await self._broadcast("server", batch)
+                    else:
+                        await _aio.sleep(0.3)
+                # Final drain
+                if sent < len(output_chunks):
+                    await self._broadcast("server", "".join(output_chunks[sent:]))
+
+                await task  # propagate exceptions
                 await self._broadcast("server", "\nExperiment complete.\n")
 
             except Exception as e:
