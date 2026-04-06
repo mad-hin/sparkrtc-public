@@ -4,11 +4,18 @@ import type { ExperimentConfig, ExperimentStatus, TimestampLog } from '../api/ty
 
 const STORAGE_KEY = 'sparkrtc-experiment'
 
+export type BatchStatus = 'pending' | 'running' | 'done' | 'error'
+
 interface ExperimentState {
   status: ExperimentStatus
   logs: { server: string; sender: string; receiver: string }
   timestampLogs: TimestampLog[]
   figures: string[]
+
+  // Batch run state (persists across tab navigation)
+  batchRunning: boolean
+  batchCurrentIdx: number
+  batchResults: Record<string, BatchStatus>
 
   setStatus: (status: ExperimentStatus) => void
   appendLog: (source: 'server' | 'sender' | 'receiver', text: string) => void
@@ -18,6 +25,10 @@ interface ExperimentState {
   loadTimestampLogs: (outputDir: string, dataName: string) => Promise<void>
   loadFigures: (outputDir: string, dataName: string) => Promise<void>
   loadSaved: () => void
+  setBatchRunning: (v: boolean) => void
+  setBatchCurrentIdx: (v: number) => void
+  setBatchResults: (v: Record<string, BatchStatus>) => void
+  updateBatchResult: (id: string, status: BatchStatus) => void
 }
 
 function saveContext(output_dir: string | null, data_name: string | null) {
@@ -33,6 +44,9 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
   logs: { server: '', sender: '', receiver: '' },
   timestampLogs: [],
   figures: [],
+  batchRunning: false,
+  batchCurrentIdx: -1,
+  batchResults: {},
 
   setStatus: (status) => {
     set({ status })
@@ -82,6 +96,13 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
     )
     set({ figures: figs })
   },
+
+  setBatchRunning: (v) => set({ batchRunning: v }),
+  setBatchCurrentIdx: (v) => set({ batchCurrentIdx: v }),
+  setBatchResults: (v) => set({ batchResults: v }),
+  updateBatchResult: (id, status) => set((state) => ({
+    batchResults: { ...state.batchResults, [id]: status }
+  })),
 
   loadSaved: () => {
     try {

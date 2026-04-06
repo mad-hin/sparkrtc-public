@@ -5,6 +5,8 @@ declare global {
       openFile: (options?: object) => Promise<string | null>
       openDirectory: (options?: object) => Promise<string | null>
       getPythonPort: () => Promise<number | null>
+      takeScreenshot: () => Promise<string | null>
+      screenshotToClipboard: () => Promise<boolean>
     }
   }
 }

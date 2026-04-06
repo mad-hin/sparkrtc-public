@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from math import log10, sqrt
 
 ffmpeg_path = "ffmpeg"
-mahimahi_path = "/home/marco/networking/sparkrtc-public/mahimahi"
+mahimahi_path = "/home/marco/networking/sparkrtc-public/mahimahi/src/frontend/"
 fps = 30
 
 def gen_qrcode_pic(num, data_dir):
@@ -349,6 +349,9 @@ def calc_delay_framesize_rate(recv_dir, res_dir):
                 break
 
     rate_time, rate, frame_size_time, frame_size = extract_rate_and_framesize(recv_dir)
+    if not rate_time or not frame_size_time or not time_stamp_end:
+        print("Warning: empty rate/frame_size/timestamp data — skipping delay/rate calculation")
+        return [], [], 0, []
     start_time = min(rate_time[0], frame_size_time[0], time_stamp_end[0])
     rate_time = [x - start_time for x in rate_time]
     frame_size_time = [x - start_time for x in frame_size_time]
@@ -420,33 +423,49 @@ def start_process(cmd, error_log_file=None):
         return subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, preexec_fn=os.setsid)
 
 def kill_process(process):
-    process.terminate() 
-    process.wait()
-    os.killpg(process.pid,signal.SIGKILL)
+    try:
+        process.terminate()
+        process.wait(timeout=5)
+    except Exception:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, OSError):
+        pass
 
-def run_receive_process(client_bin, recv_file, server_ip, port, recv_dir, trace_file):
-    # if enalbe mahimahi, need to explicit set server_ip and port
-    enable_mahimahi_limit = False
+def run_receive_process(client_bin, recv_file, server_ip, port, recv_dir, trace_file,
+                        enable_mahimahi=False, enable_loss_trace=False, field_trials='',
+                        delay_ms=0):
+    enable_mahimahi_limit = enable_mahimahi
     enable_screenshot = False
 
     screenshot_process = -1
-    
+    ft_flag = (" --force_fieldtrials " + field_trials) if field_trials else ""
+
+    # When MahiMahi is enabled, all peers run inside the same network namespace
+    # so they can discover each other via ICE. They connect to the server at 127.0.0.1
+    # (localhost inside the namespace), since the server also runs inside mm-link.
+    recv_server_ip = server_ip
+
     if enable_screenshot:
-        recv_command = client_bin + " --gui --recon " + recv_file + " --server " + server_ip + " --port " + port + \
-            " > " + recv_dir + "recv.log 2>&1 &\n"
+        recv_command = client_bin + " --gui --recon " + recv_file + " --server " + recv_server_ip + " --port " + port + \
+            ft_flag + " > " + recv_dir + "recv.log 2>&1 &\n"
         xvfb_display_command = "export DISPLAY=:100 && Xvfb :100 -screen 0 1280x720x24&"
         recv_process = start_process(xvfb_display_command + " && " + recv_command)
-        # subprocess.run(recv_command)
-        # ffmpeg_command = "ffmpeg -video_size 1280x720 -framerate 30 -f x11grab -i :100 -r 30 -y output.mp4&"
-        # screenshot_process = start_process(ffmpeg_command)
     else:
-        recv_command = client_bin + " --recon " + recv_file + " --server " + server_ip + " --port " + port + \
-            " > " + recv_dir + "recv.log 2>&1 &\n"
+        recv_command = client_bin + " --recon " + recv_file + " --server " + recv_server_ip + " --port " + port + \
+            ft_flag + " > " + recv_dir + "recv.log 2>&1 &\n"
         recv_process = -1
 
     trace_logs_file = "../file/trace_logs/" + trace_file + ".log"
-    mahimahi_command = mahimahi_path + "mm-link " + str(trace_logs_file) + " " + str(trace_logs_file)# + mahimahi_path + "mm-loss-trace " +\
-        #"downlink --trace-file=../file/loss_trace"
+    mahimahi_command = ""
+    if delay_ms > 0:
+        mahimahi_command += mahimahi_path + "mm-delay " + str(delay_ms) + " "
+    mahimahi_command += mahimahi_path + "mm-link " + str(trace_logs_file) + " " + str(trace_logs_file)
+    if enable_loss_trace:
+        import logging
+        logging.warning("mm-loss-trace is disabled due to binary segfault. "
+                        "Loss simulation relies on bandwidth-constrained traces instead.")
 
     if enable_mahimahi_limit:
         if recv_process == -1:
@@ -462,7 +481,6 @@ def run_receive_process(client_bin, recv_file, server_ip, port, recv_dir, trace_
         if recv_process == -1:
             recv_process = start_process(recv_command)
         else:
-            # subprocess.run(recv_command)
             recv_process.stdin.write(recv_command.encode())
             recv_process.stdin.flush()
         time.sleep(1)
@@ -476,9 +494,15 @@ def send_and_recv_video(cfg):
 
     client_bin = root_dir + "out/Default/peerconnection_localvideo"
 
-    # Can custormize ip and port
-    server_ip = "127.0.0.1"
-    port = "8888"
+    # Read from cfg with backward-compatible defaults
+    server_ip = getattr(cfg, 'server_ip', '127.0.0.1')
+    port = str(getattr(cfg, 'port', 8888))
+    send_fps = getattr(cfg, 'fps', fps)
+    field_trials = getattr(cfg, 'field_trials', '')
+    enable_mahimahi = getattr(cfg, 'enable_mahimahi', False)
+    enable_loss_trace = getattr(cfg, 'enable_loss_trace', False)
+    delay_ms = getattr(cfg, 'delay_ms', 0)
+    trace_file = getattr(cfg, 'trace_file', '') or str(words[0])
 
     recv_dir = "../result/" + cfg.output_dir + "/rec/" + cfg.data + "/"
     recv_file = recv_dir + "recon.yuv"
@@ -486,7 +510,9 @@ def send_and_recv_video(cfg):
 
     server_command = root_dir + "out/Default/peerconnection_server --port " + port + " &"
     send_command = root_dir + "out/Default/peerconnection_localvideo --file " + send_video_path + \
-        " --height " + str(cfg.height) + " --width " + str(cfg.width) + " --fps " + str(fps) + " --server " + server_ip + " --port " + port
+        " --height " + str(cfg.height) + " --width " + str(cfg.width) + " --fps " + str(send_fps) + " --server " + server_ip + " --port " + port
+    if field_trials:
+        send_command += " --force_fieldtrials " + field_trials
 
     send_log_file = recv_dir + "send.log"
 
@@ -496,13 +522,56 @@ def send_and_recv_video(cfg):
     f_res_overal_file = open(res_overall_dir + "statistics.log", "a")
     f_result_csv_file = open(res_overall_dir + "statistics.csv", "a")
 
-    server_process = start_process(server_command)
-    time.sleep(1)
+    if enable_mahimahi:
+        # Run server, receiver, AND sender all inside the same mm-link namespace
+        # so they can discover each other via ICE on localhost.
+        trace_logs_file = "../file/trace_logs/" + trace_file + ".log"
+        mahimahi_command = ""
+        if delay_ms > 0:
+            mahimahi_command += mahimahi_path + "mm-delay " + str(delay_ms) + " "
+        mahimahi_command += mahimahi_path + "mm-link " + str(trace_logs_file) + " " + str(trace_logs_file)
 
-    recv_process, screenshot_process = run_receive_process(client_bin, recv_file, server_ip, port, recv_dir, str(words[0]))
+        mm_process = start_process(mahimahi_command)
+        time.sleep(0.5)
 
-    send_process = start_process(send_command, send_log_file)
-    send_process.wait()
+        # Start server inside mm-link
+        mm_process.stdin.write(server_command.encode())
+        mm_process.stdin.flush()
+        time.sleep(1)
+
+        # Start receiver inside mm-link
+        ft_flag = (" --force_fieldtrials " + field_trials) if field_trials else ""
+        recv_command = (client_bin + " --recon " + recv_file +
+                       " --server " + server_ip + " --port " + port +
+                       ft_flag + " > " + recv_dir + "recv.log 2>&1 &\n")
+        mm_process.stdin.write(recv_command.encode())
+        mm_process.stdin.flush()
+        time.sleep(2)
+
+        # Start sender inside mm-link (foreground — wait for it to finish)
+        # After sender exits, kill backgrounded server/receiver and exit the shell
+        send_fg_command = (send_command + " > " + send_log_file + " 2>&1;"
+                          " pkill -P $$ 2>/dev/null; exit 0\n")
+        mm_process.stdin.write(send_fg_command.encode())
+        mm_process.stdin.flush()
+
+        # Wait for mm-link shell to exit (sender done → pkill children → exit)
+        mm_process.wait()
+
+        recv_process = mm_process
+        screenshot_process = -1
+        server_process = mm_process  # same process group
+    else:
+        server_process = start_process(server_command)
+        time.sleep(1)
+
+        recv_process, screenshot_process = run_receive_process(
+            client_bin, recv_file, server_ip, port, recv_dir, trace_file,
+            enable_mahimahi=False, enable_loss_trace=False,
+            field_trials=field_trials, delay_ms=0)
+
+        send_process = start_process(send_command, send_log_file)
+        send_process.wait()
 
     kill_process(recv_process)
     if screenshot_process != -1:

@@ -14,20 +14,20 @@ const STEP_LABELS = ['Anomaly Analysis', 'Deep Dive', 'Code Changes']
 
 function StepIndicator({ currentStep, message }: { currentStep: number; message: string }) {
   return (
-    <div className="bg-surface-secondary border border-slate-700 rounded-xl p-3 mb-4">
+    <div className="bg-surface-secondary border border-[#393939] rounded-none p-3 mb-4">
       <div className="flex items-center gap-4 text-xs">
         {[1, 2, 3].map((step) => (
           <div
             key={step}
             className={`flex items-center gap-1.5 ${
               currentStep === step ? 'text-accent' :
-              currentStep > step ? 'text-success' : 'text-slate-500'
+              currentStep > step ? 'text-success' : 'text-[#6f6f6f]'
             }`}
           >
             <span
               className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                currentStep === step ? 'bg-accent text-white' :
-                currentStep > step ? 'bg-success/20 text-success' : 'bg-slate-700'
+                currentStep === step ? 'bg-accent text-[#f4f4f4]' :
+                currentStep > step ? 'bg-success/20 text-success' : 'bg-[#393939]'
               }`}
             >
               {currentStep > step ? '\u2713' : step}
@@ -37,7 +37,7 @@ function StepIndicator({ currentStep, message }: { currentStep: number; message:
         ))}
       </div>
       {message && (
-        <p className="text-xs text-slate-400 mt-2 flex items-center gap-1.5">
+        <p className="text-xs text-[#c6c6c6] mt-2 flex items-center gap-1.5">
           {currentStep > 0 && currentStep <= 3 && (
             <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
           )}
@@ -260,19 +260,19 @@ export default function CodeAgent() {
     return (
       <div className="h-full flex flex-col">
         <div className="mb-4">
-          <h2 className="text-2xl font-bold text-white">AI Code Agent</h2>
-          <p className="text-sm text-slate-400 mt-1">AI-powered code suggestions with automated testing</p>
+          <h2 className="text-2xl font-bold text-[#f4f4f4]">AI Code Agent</h2>
+          <p className="text-sm text-[#c6c6c6] mt-1">AI-powered code suggestions with automated testing</p>
         </div>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center max-w-md">
-            <KeyRound size={48} className="mx-auto mb-4 text-slate-500 opacity-60" />
-            <h3 className="text-lg font-semibold text-white mb-2">API Key Required</h3>
-            <p className="text-sm text-slate-400 mb-5">
+            <KeyRound size={48} className="mx-auto mb-4 text-[#6f6f6f] opacity-60" />
+            <h3 className="text-lg font-semibold text-[#f4f4f4] mb-2">API Key Required</h3>
+            <p className="text-sm text-[#c6c6c6] mb-5">
               Set up your OpenRouter API key in Settings to use the Code Agent.
             </p>
             <button
               onClick={() => navigate('/settings')}
-              className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium inline-flex items-center gap-2"
+              className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-[#f4f4f4] rounded-none text-sm font-medium inline-flex items-center gap-2"
             >
               <Settings size={16} /> Go to Settings
             </button>
@@ -286,18 +286,18 @@ export default function CodeAgent() {
     <div className="h-full flex flex-col">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">AI Code Agent</h2>
-          <p className="text-sm text-slate-400 mt-1">AI-powered code suggestions with automated testing</p>
+          <h2 className="text-2xl font-bold text-[#f4f4f4]">AI Code Agent</h2>
+          <p className="text-sm text-[#c6c6c6] mt-1">AI-powered code suggestions with automated testing</p>
         </div>
         {store.branchName && (
-          <span className="text-xs bg-accent/20 text-accent px-3 py-1.5 rounded-full font-mono">
+          <span className="text-xs bg-accent/20 text-accent px-3 py-1.5 rounded-pill font-mono">
             {store.branchName}
           </span>
         )}
       </div>
 
       {/* Controls */}
-      <div className="bg-surface-secondary border border-slate-700 rounded-xl p-4 mb-4">
+      <div className="bg-surface-secondary border border-[#393939] rounded-none p-4 mb-4">
         <div className="flex items-center gap-3 flex-wrap">
           {models.length > 0 && (
             <ModelSelector value={selectedModel} onChange={setSelectedModel} models={models} />
@@ -307,14 +307,14 @@ export default function CodeAgent() {
             <button
               onClick={handleAnalyze}
               disabled={!canAnalyze}
-              className="px-5 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+              className="px-5 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-[#f4f4f4] rounded-none text-sm font-medium flex items-center gap-2"
             >
               <Bot size={16} /> Analyze & Suggest Changes
             </button>
           ) : (
             <button
               onClick={handleStop}
-              className="px-5 py-2 bg-danger hover:bg-red-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+              className="px-5 py-2 bg-danger hover:bg-red-600 text-[#f4f4f4] rounded-none text-sm font-medium flex items-center gap-2"
             >
               <Square size={16} /> Stop
             </button>
@@ -322,16 +322,16 @@ export default function CodeAgent() {
 
           {store.suggestions.length > 0 && (
             <>
-              <button onClick={store.acceptAll} className="px-3 py-2 bg-surface-tertiary hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5">
+              <button onClick={store.acceptAll} className="px-3 py-2 bg-surface-tertiary hover:bg-[#525252] text-[#f4f4f4] rounded-none text-xs font-medium flex items-center gap-1.5">
                 <CheckCheck size={14} /> Accept All
               </button>
-              <button onClick={store.rejectAll} className="px-3 py-2 bg-surface-tertiary hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5">
+              <button onClick={store.rejectAll} className="px-3 py-2 bg-surface-tertiary hover:bg-[#525252] text-[#f4f4f4] rounded-none text-xs font-medium flex items-center gap-1.5">
                 <XCircle size={14} /> Reject All
               </button>
               <button
                 onClick={handleConfirmAndTest}
                 disabled={acceptedCount === 0 || store.buildStatus.running}
-                className="px-5 py-2 bg-success hover:bg-green-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                className="px-5 py-2 bg-success hover:bg-green-600 disabled:opacity-50 text-[#f4f4f4] rounded-none text-sm font-medium flex items-center gap-2"
               >
                 <Hammer size={16} /> Confirm & Test ({acceptedCount})
               </button>
@@ -341,7 +341,7 @@ export default function CodeAgent() {
           {store.buildStatus.success === false && (
             <button
               onClick={handleAskLLMFix}
-              className="px-4 py-2 bg-warning hover:bg-amber-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+              className="px-4 py-2 bg-warning hover:bg-amber-600 text-[#f4f4f4] rounded-none text-sm font-medium flex items-center gap-2"
             >
               <RefreshCw size={14} /> Ask LLM to Fix
             </button>
@@ -350,7 +350,7 @@ export default function CodeAgent() {
           {store.buildStatus.success === true && !store.experimentRunning && (
             <button
               onClick={handleRunExperiment}
-              className="px-5 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium flex items-center gap-2"
+              className="px-5 py-2 bg-accent hover:bg-accent-hover text-[#f4f4f4] rounded-none text-sm font-medium flex items-center gap-2"
             >
               <Play size={16} /> Run Experiment
             </button>
@@ -369,8 +369,8 @@ export default function CodeAgent() {
 
           {/* Summary Statistics (collapsible) */}
           {store.summaryText && (
-            <details className="bg-surface-secondary border border-slate-700 rounded-xl">
-              <summary className="px-4 py-2.5 cursor-pointer text-xs text-slate-400 hover:text-slate-300 flex items-center gap-2">
+            <details className="bg-surface-secondary border border-[#393939] rounded-none">
+              <summary className="px-4 py-2.5 cursor-pointer text-xs text-[#c6c6c6] hover:text-[#c6c6c6] flex items-center gap-2">
                 <FileCode size={14} />
                 Summary Statistics
                 <span className="ml-auto flex gap-2">
@@ -383,9 +383,9 @@ export default function CodeAgent() {
                 </span>
               </summary>
               <div className="px-4 pb-3 space-y-2">
-                <div className="text-[10px] font-mono text-slate-500">
-                  <span className="text-slate-400">dir:</span> {store.summaryOutputDir}
-                  <span className="text-slate-400 ml-3">data:</span> {store.summaryDataName}
+                <div className="text-[10px] font-mono text-[#6f6f6f]">
+                  <span className="text-[#c6c6c6]">dir:</span> {store.summaryOutputDir}
+                  <span className="text-[#c6c6c6] ml-3">data:</span> {store.summaryDataName}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {store.summaryFoundFiles.map((f) => (
@@ -395,7 +395,7 @@ export default function CodeAgent() {
                     <span key={f} className="text-[10px] font-mono bg-warning/10 text-warning px-2 py-0.5 rounded">{f}</span>
                   ))}
                 </div>
-                <pre className="text-xs font-mono text-slate-400 whitespace-pre-wrap leading-relaxed max-h-64 overflow-auto">
+                <pre className="text-xs font-mono text-[#c6c6c6] whitespace-pre-wrap leading-relaxed max-h-64 overflow-auto">
                   {store.summaryText}
                 </pre>
               </div>
@@ -407,13 +407,13 @@ export default function CodeAgent() {
             <details
               open={store.thinkingVisible}
               onToggle={(e) => store.setThinkingVisible((e.target as HTMLDetailsElement).open)}
-              className="bg-surface-secondary border border-amber-900/30 rounded-xl"
+              className="bg-surface-secondary border border-amber-900/30 rounded-none"
             >
               <summary className="px-4 py-2.5 cursor-pointer text-xs text-amber-400/70 hover:text-amber-300 flex items-center gap-2">
                 <Brain size={14} />
                 Model Reasoning ({Math.round(store.thinkingContent.length / 3.5)} tokens)
               </summary>
-              <div className="px-4 pb-3 text-xs text-slate-500 font-mono whitespace-pre-wrap max-h-64 overflow-auto leading-relaxed">
+              <div className="px-4 pb-3 text-xs text-[#6f6f6f] font-mono whitespace-pre-wrap max-h-64 overflow-auto leading-relaxed">
                 {store.thinkingContent}
                 {store.streaming && (
                   <span className="inline-block w-1.5 h-3 bg-amber-500/60 animate-pulse ml-0.5" />
@@ -424,15 +424,15 @@ export default function CodeAgent() {
 
           {/* Files analyzed chips */}
           {store.filesRead.length > 0 && (
-            <div className="bg-surface-secondary border border-slate-700 rounded-xl p-3">
-              <h4 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+            <div className="bg-surface-secondary border border-[#393939] rounded-none p-3">
+              <h4 className="text-xs font-medium text-[#c6c6c6] mb-2 flex items-center gap-1.5">
                 <FileCode size={12} /> Files Analyzed ({store.filesRead.length})
               </h4>
               <div className="flex flex-wrap gap-1.5">
                 {store.filesRead.map((f) => (
                   <span
                     key={f}
-                    className="text-[10px] font-mono bg-slate-700/50 px-2 py-0.5 rounded text-slate-300"
+                    className="text-[10px] font-mono bg-[#393939]/50 px-2 py-0.5 rounded text-[#c6c6c6]"
                   >
                     {f}
                   </span>
@@ -443,7 +443,7 @@ export default function CodeAgent() {
 
           {/* Analysis markdown */}
           {store.analysisMarkdown && (
-            <div className="bg-surface-secondary border border-slate-700 rounded-xl p-4">
+            <div className="bg-surface-secondary border border-[#393939] rounded-none p-4">
               <MarkdownRenderer content={
                 store.analysisMarkdown
                   .replace(/<files_needed>[\s\S]*?<\/files_needed>/g, '')
@@ -462,23 +462,23 @@ export default function CodeAgent() {
           {store.suggestions.map((suggestion) => (
             <div
               key={suggestion.id}
-              className={`bg-surface-secondary border rounded-xl overflow-hidden ${
-                suggestion.accepted ? 'border-success/50' : 'border-slate-700'
+              className={`bg-surface-secondary border rounded-none overflow-hidden ${
+                suggestion.accepted ? 'border-success/50' : 'border-[#393939]'
               }`}
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 bg-surface-tertiary/30">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#393939] bg-surface-tertiary/30">
                 <div>
-                  <span className="text-sm font-mono text-slate-200">{suggestion.file}</span>
+                  <span className="text-sm font-mono text-[#f4f4f4]">{suggestion.file}</span>
                   {suggestion.description && (
-                    <p className="text-xs text-slate-400 mt-0.5">{suggestion.description}</p>
+                    <p className="text-xs text-[#c6c6c6] mt-0.5">{suggestion.description}</p>
                   )}
                 </div>
                 <button
                   onClick={() => store.toggleSuggestion(suggestion.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                  className={`px-3 py-1.5 rounded-none text-xs font-medium flex items-center gap-1.5 transition-colors ${
                     suggestion.accepted
                       ? 'bg-success/20 text-success hover:bg-success/30'
-                      : 'bg-surface-tertiary text-slate-300 hover:bg-slate-600'
+                      : 'bg-surface-tertiary text-[#c6c6c6] hover:bg-[#525252]'
                   }`}
                 >
                   {suggestion.accepted ? <Check size={12} /> : <X size={12} />}
@@ -512,7 +512,7 @@ export default function CodeAgent() {
 
           {/* Empty state */}
           {!store.analysisMarkdown && store.suggestions.length === 0 && !store.streaming && (
-            <div className="flex items-center justify-center h-full text-slate-500">
+            <div className="flex items-center justify-center h-full text-[#6f6f6f]">
               <div className="text-center">
                 <Bot size={48} className="mx-auto mb-3 opacity-40" />
                 <p className="text-sm">Click "Analyze & Suggest Changes" to start</p>
@@ -524,9 +524,9 @@ export default function CodeAgent() {
 
         {/* Build output (shown when building or built) */}
         {(buildOutput || store.buildStatus.running) && (
-          <div className="w-96 bg-surface-secondary border border-slate-700 rounded-xl overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-slate-300">Build Output</h3>
+          <div className="w-96 bg-surface-secondary border border-[#393939] rounded-none overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-[#393939] flex items-center justify-between">
+              <h3 className="text-sm font-medium text-[#c6c6c6]">Build Output</h3>
               {store.buildStatus.running && (
                 <span className="text-xs text-accent animate-pulse">Building...</span>
               )}
@@ -537,7 +537,7 @@ export default function CodeAgent() {
                 <span className="text-xs text-danger">Build Failed</span>
               )}
             </div>
-            <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-slate-400 leading-relaxed">
+            <pre className="flex-1 overflow-auto p-3 text-xs font-mono text-[#c6c6c6] leading-relaxed">
               {buildOutput || 'Waiting for build output...'}
             </pre>
           </div>
@@ -547,38 +547,38 @@ export default function CodeAgent() {
       {/* Confirmation dialog */}
       {confirmDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-surface-secondary border border-slate-600 rounded-xl shadow-2xl w-full max-w-md mx-4">
-            <div className="px-5 py-4 border-b border-slate-700">
-              <h3 className="text-base font-semibold text-white">Create Branch & Apply Patches</h3>
+          <div className="bg-surface-secondary border border-[#393939] rounded-none shadow-2xl w-full max-w-md mx-4">
+            <div className="px-5 py-4 border-b border-[#393939]">
+              <h3 className="text-base font-semibold text-[#f4f4f4]">Create Branch & Apply Patches</h3>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div>
-                <p className="text-xs text-slate-400 mb-1">Branch name</p>
-                <p className="text-sm font-mono text-accent bg-surface rounded-lg px-3 py-2 border border-slate-700">
+                <p className="text-xs text-[#c6c6c6] mb-1">Branch name</p>
+                <p className="text-sm font-mono text-accent bg-surface rounded-none px-3 py-2 border border-[#393939]">
                   {confirmDialog.branchName}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-400 mb-1">Files to patch ({confirmDialog.files.length})</p>
+                <p className="text-xs text-[#c6c6c6] mb-1">Files to patch ({confirmDialog.files.length})</p>
                 <div className="space-y-1 max-h-32 overflow-auto">
                   {confirmDialog.files.map((f) => (
-                    <p key={f} className="text-xs font-mono text-slate-300 bg-surface rounded px-2 py-1 border border-slate-700">
+                    <p key={f} className="text-xs font-mono text-[#c6c6c6] bg-surface rounded px-2 py-1 border border-[#393939]">
                       {f}
                     </p>
                   ))}
                 </div>
               </div>
             </div>
-            <div className="px-5 py-3 border-t border-slate-700 flex justify-end gap-2">
+            <div className="px-5 py-3 border-t border-[#393939] flex justify-end gap-2">
               <button
                 onClick={() => setConfirmDialog(null)}
-                className="px-4 py-2 bg-surface-tertiary hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-medium"
+                className="px-4 py-2 bg-surface-tertiary hover:bg-[#525252] text-[#f4f4f4] rounded-none text-sm font-medium"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmApply}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium"
+                className="px-4 py-2 bg-accent hover:bg-accent-hover text-[#f4f4f4] rounded-none text-sm font-medium"
               >
                 Create Branch & Apply
               </button>

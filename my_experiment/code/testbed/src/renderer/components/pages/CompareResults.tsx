@@ -63,18 +63,18 @@ export default function CompareResults() {
 
     if (absDelta < 0.001) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-700/50 text-slate-400 rounded-full text-xs font-medium">
+        <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#393939]/50 text-[#c6c6c6] rounded-pill text-xs font-medium">
           <Minus size={12} /> No Change
         </span>
       )
     }
 
     return metric.improved ? (
-      <span className="inline-flex items-center gap-1 px-2 py-1 bg-success/20 text-success rounded-full text-xs font-medium">
+      <span className="inline-flex items-center gap-1 px-2 py-1 bg-success/20 text-success rounded-pill text-xs font-medium">
         <ArrowUp size={12} /> {pct}% Improved
       </span>
     ) : (
-      <span className="inline-flex items-center gap-1 px-2 py-1 bg-danger/20 text-danger rounded-full text-xs font-medium">
+      <span className="inline-flex items-center gap-1 px-2 py-1 bg-danger/20 text-danger rounded-pill text-xs font-medium">
         <ArrowDown size={12} /> {pct}% Degraded
       </span>
     )
@@ -84,25 +84,25 @@ export default function CompareResults() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Compare Results</h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <h2 className="text-2xl font-bold text-[#f4f4f4]">Compare Results</h2>
+          <p className="text-sm text-[#c6c6c6] mt-1">
             Side-by-side comparison of baseline vs modified experiment
           </p>
         </div>
         {branchName && (
           <div className="flex items-center gap-3">
-            <span className="text-xs bg-accent/20 text-accent px-3 py-1.5 rounded-full font-mono flex items-center gap-1.5">
+            <span className="text-xs bg-accent/20 text-accent px-3 py-1.5 rounded-pill font-mono flex items-center gap-1.5">
               <GitBranch size={12} /> {branchName}
             </span>
             <button
               onClick={handleKeepChanges}
-              className="px-4 py-2 bg-success hover:bg-green-600 text-white rounded-lg text-sm font-medium"
+              className="px-4 py-2 bg-success hover:bg-green-600 text-[#f4f4f4] rounded-none text-sm font-medium"
             >
               Keep Changes
             </button>
             <button
               onClick={handleDiscard}
-              className="px-4 py-2 bg-danger hover:bg-red-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+              className="px-4 py-2 bg-danger hover:bg-red-600 text-[#f4f4f4] rounded-none text-sm font-medium flex items-center gap-2"
             >
               <Trash2 size={14} /> Discard
             </button>
@@ -117,22 +117,22 @@ export default function CompareResults() {
             {comparison.metrics.map((m) => (
               <div
                 key={m.name}
-                className="bg-surface-secondary border border-slate-700 rounded-xl p-5"
+                className="bg-surface-secondary border border-[#393939] rounded-none p-5"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+                  <h3 className="text-sm font-medium text-[#c6c6c6] uppercase tracking-wider">
                     {m.name}
                   </h3>
                   <ImprovementBadge metric={m} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-slate-500 mb-1">Baseline</p>
-                    <p className="text-xl font-bold text-slate-300">{m.baseline.toFixed(2)}</p>
+                    <p className="text-xs text-[#6f6f6f] mb-1">Baseline</p>
+                    <p className="text-xl font-bold text-[#c6c6c6]">{m.baseline.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500 mb-1">Modified</p>
-                    <p className="text-xl font-bold text-white">{m.modified.toFixed(2)}</p>
+                    <p className="text-xs text-[#6f6f6f] mb-1">Modified</p>
+                    <p className="text-xl font-bold text-[#f4f4f4]">{m.modified.toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -145,9 +145,9 @@ export default function CompareResults() {
               {chartData.map((chart, i) => (
                 <div
                   key={i}
-                  className="bg-surface-secondary border border-slate-700 rounded-xl p-5"
+                  className="bg-surface-secondary border border-[#393939] rounded-none p-5"
                 >
-                  <h3 className="text-sm font-medium text-slate-300 mb-4">
+                  <h3 className="text-sm font-medium text-[#c6c6c6] mb-4">
                     {chart.title}
                   </h3>
                   <ResponsiveContainer width="100%" height={250}>
@@ -188,7 +188,7 @@ export default function CompareResults() {
           )}
         </>
       ) : (
-        <div className="flex items-center justify-center h-64 text-slate-500">
+        <div className="flex items-center justify-center h-64 text-[#6f6f6f]">
           <div className="text-center">
             <GitCompare size={48} className="mx-auto mb-3 opacity-40" />
             <p className="text-sm">No comparison data available</p>

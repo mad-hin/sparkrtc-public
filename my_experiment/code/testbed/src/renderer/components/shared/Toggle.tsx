@@ -4,13 +4,15 @@ export default function Toggle({ checked, onChange, disabled }: { checked: boole
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={() => !disabled && onChange(!checked)}
-      className={`relative w-8 h-4 rounded-full transition-colors ${
+      className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0 ${
         disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
-      } ${checked ? 'bg-accent' : 'bg-slate-600'}`}
+      } ${checked ? 'bg-accent' : 'bg-[#6f6f6f]'}`}
     >
-      <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-        checked ? 'translate-x-4' : ''
+      <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
+        checked ? 'translate-x-6' : ''
       }`} />
     </button>
   )

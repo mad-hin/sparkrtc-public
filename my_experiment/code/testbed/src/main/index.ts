@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, nativeImage } from 'electron'
 import { join } from 'path'
+import { writeFileSync } from 'fs'
 import { PythonBridge } from './python-bridge'
 
 let mainWindow: BrowserWindow | null = null
@@ -12,7 +13,7 @@ function createWindow(): void {
     minWidth: 1024,
     minHeight: 700,
     title: 'SparkRTC Testbed',
-    backgroundColor: '#0f172a',
+    backgroundColor: '#161616',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -50,6 +51,30 @@ ipcMain.handle('dialog:openDirectory', async (_event, options) => {
 
 ipcMain.handle('python:getPort', () => {
   return pythonBridge?.getPort() ?? null
+})
+
+// Screenshot: save to file
+ipcMain.handle('app:screenshot', async () => {
+  if (!mainWindow) return null
+  const image = await mainWindow.webContents.capturePage()
+  const result = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: `sparkrtc-screenshot-${Date.now()}.png`,
+    filters: [{ name: 'PNG Image', extensions: ['png'] }]
+  })
+  if (!result.canceled && result.filePath) {
+    writeFileSync(result.filePath, image.toPNG())
+    return result.filePath
+  }
+  return null
+})
+
+// Screenshot: copy to clipboard
+ipcMain.handle('app:screenshotClipboard', async () => {
+  if (!mainWindow) return false
+  const { clipboard } = await import('electron')
+  const image = await mainWindow.webContents.capturePage()
+  clipboard.writeImage(nativeImage.createFromBuffer(image.toPNG()))
+  return true
 })
 
 app.whenReady().then(async () => {

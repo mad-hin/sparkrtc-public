@@ -75,7 +75,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="absolute top-2 right-2 p-1.5 rounded-md bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors"
+      className="absolute top-2 right-2 p-1.5 rounded-none bg-[#393939] hover:bg-[#525252] text-[#c6c6c6] hover:text-[#f4f4f4] transition-colors"
       title="Copy code"
     >
       {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -88,13 +88,13 @@ function DiffRenderer({ code }: { code: string }) {
   const lines = code.split('\n')
   
   return (
-    <pre className="bg-slate-900 border border-slate-700 rounded-lg p-4 overflow-x-auto text-xs font-mono">
+    <pre className="bg-[#161616] border border-[#393939] rounded-none p-4 overflow-x-auto text-xs font-mono">
       {lines.map((line, i) => {
-        let lineClass = 'text-slate-300'
+        let lineClass = 'text-[#c6c6c6]'
         let bgClass = ''
         
         if (line.startsWith('+++') || line.startsWith('---')) {
-          lineClass = 'text-slate-400'
+          lineClass = 'text-[#c6c6c6]'
         } else if (line.startsWith('@@')) {
           lineClass = 'text-cyan-400'
         } else if (line.startsWith('+')) {
@@ -121,10 +121,10 @@ function CodeChangeRenderer({ codeChange }: { codeChange: CodeChangeBlock }) {
     <div className="my-4">
       <div className="flex items-center gap-2 mb-1">
         <FileCode size={14} className="text-blue-400" />
-        <span className="font-semibold text-slate-200">{codeChange.file}</span>
+        <span className="font-semibold text-[#f4f4f4]">{codeChange.file}</span>
       </div>
       {codeChange.description && (
-        <p className="text-sm text-slate-400 mb-2 italic">{codeChange.description}</p>
+        <p className="text-sm text-[#c6c6c6] mb-2 italic">{codeChange.description}</p>
       )}
       <div className="relative group">
         <DiffRenderer code={codeChange.code} />
@@ -157,7 +157,7 @@ function MarkdownSegment({ content }: { content: string }) {
             <div className="relative group">
               <pre
                 {...props}
-                className="bg-surface-secondary border border-slate-700 rounded-lg p-4 overflow-x-auto"
+                className="bg-surface-secondary border border-[#393939] rounded-none p-4 overflow-x-auto"
               >
                 {children}
               </pre>
@@ -170,7 +170,7 @@ function MarkdownSegment({ content }: { content: string }) {
         table({ children, ...props }) {
           return (
             <div className="overflow-x-auto">
-              <table {...props} className="border-collapse border border-slate-700">
+              <table {...props} className="border-collapse border border-[#393939]">
                 {children}
               </table>
             </div>
@@ -178,14 +178,14 @@ function MarkdownSegment({ content }: { content: string }) {
         },
         th({ children, ...props }) {
           return (
-            <th {...props} className="border border-slate-700 bg-surface-tertiary px-3 py-2 text-left text-xs font-medium text-slate-300">
+            <th {...props} className="border border-[#393939] bg-surface-tertiary px-3 py-2 text-left text-xs font-medium text-[#c6c6c6]">
               {children}
             </th>
           )
         },
         td({ children, ...props }) {
           return (
-            <td {...props} className="border border-slate-700 px-3 py-2 text-sm text-slate-300">
+            <td {...props} className="border border-[#393939] px-3 py-2 text-sm text-[#c6c6c6]">
               {children}
             </td>
           )

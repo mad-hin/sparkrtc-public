@@ -21,20 +21,20 @@ export default function MetricCard({
   className = ''
 }: MetricCardProps) {
   const trendColor =
-    trend === 'up' ? 'text-success' : trend === 'down' ? 'text-danger' : 'text-slate-400'
+    trend === 'up' ? 'text-success' : trend === 'down' ? 'text-danger' : 'text-[#c6c6c6]'
   const TrendIcon =
     trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus
 
   return (
     <div
-      className={`bg-surface-secondary border border-slate-700 rounded-xl p-5 ${className}`}
+      className={`bg-surface-secondary border border-[#393939] rounded-none p-5 ${className}`}
     >
-      <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+      <p className="text-xs font-medium text-[#c6c6c6] uppercase tracking-wider">
         {title}
       </p>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-2xl font-bold text-white">{value}</span>
-        {unit && <span className="text-sm text-slate-400">{unit}</span>}
+        <span className="text-2xl font-bold text-[#f4f4f4]">{value}</span>
+        {unit && <span className="text-sm text-[#c6c6c6]">{unit}</span>}
       </div>
       {(subtitle || trend) && (
         <div className="mt-2 flex items-center gap-1.5">
@@ -49,7 +49,7 @@ export default function MetricCard({
             </>
           )}
           {subtitle && (
-            <span className="text-xs text-slate-500">{subtitle}</span>
+            <span className="text-xs text-[#6f6f6f]">{subtitle}</span>
           )}
         </div>
       )}

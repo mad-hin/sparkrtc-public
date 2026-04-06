@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Play, Square, FolderOpen, RefreshCw, Network, Server, Settings, Film, Plus, X, FlaskConical } from 'lucide-react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { Play, Square, FolderOpen, RefreshCw, Network, Server, Settings, Film, Plus, X, FlaskConical, PlayCircle, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { useExperimentStore } from '../../store/experimentStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { createWebSocket, api } from '../../api/client'
 import Toggle from '../shared/Toggle'
 import { SCENARIOS, type DebugScenario, generateTrace, generateBurstyTrace, generateLossTrace } from '../../data/debugScenarios'
 
-const inputCls = 'w-full bg-surface border border-slate-600 rounded-lg px-2.5 py-1.5 text-xs text-slate-200'
-const labelCls = 'block text-[10px] font-medium text-slate-500 mb-1'
-const sectionCls = 'bg-surface-secondary border border-slate-700 rounded-xl p-3 space-y-2'
+const inputCls = 'w-full bg-surface border border-[#393939] rounded-none px-2.5 py-1.5 text-xs text-[#f4f4f4]'
+const labelCls = 'block text-[10px] font-medium text-[#6f6f6f] mb-1'
+const sectionCls = 'bg-surface-secondary border border-[#393939] rounded-none p-3 space-y-2'
 
 export default function Experiment() {
   const {
@@ -18,7 +18,14 @@ export default function Experiment() {
     stopExperiment,
     clearLogs,
     appendLog,
-    setStatus
+    setStatus,
+    batchRunning,
+    batchCurrentIdx,
+    batchResults,
+    setBatchRunning,
+    setBatchCurrentIdx,
+    setBatchResults,
+    updateBatchResult,
   } = useExperimentStore()
 
   // Video
@@ -52,6 +59,7 @@ export default function Experiment() {
 
   const [activeTab, setActiveTab] = useState<'server' | 'sender' | 'receiver'>('server')
   const [expandedScenario, setExpandedScenario] = useState<string | null>(null)
+  const batchAbortRef = useRef(false)
   // Editable scenario parameters
   const [scenBw, setScenBw] = useState(12)
   const [scenBwLow, setScenBwLow] = useState(1)
@@ -306,6 +314,118 @@ export default function Experiment() {
     await stopExperiment()
   }
 
+  /** Run all 7 scenarios sequentially */
+  const handleRunAll = useCallback(async () => {
+    if (!filePath) {
+      appendLog('server', '\n[Batch] Error: Select a YUV file first.\n')
+      return
+    }
+    batchAbortRef.current = false
+    setBatchRunning(true)
+    const initResults: Record<string, 'pending' | 'running' | 'done' | 'error'> = {}
+    SCENARIOS.forEach(s => { initResults[s.id] = 'pending' as const })
+    setBatchResults(initResults)
+
+    for (let i = 0; i < SCENARIOS.length; i++) {
+      if (batchAbortRef.current) {
+        appendLog('server', '\n[Batch] Aborted by user.\n')
+        break
+      }
+      const s = SCENARIOS[i]
+      setBatchCurrentIdx(i)
+      updateBatchResult(s.id, 'running')
+      appendLog('server', `\n${'='.repeat(60)}\n[Batch] Running scenario ${i + 1}/${SCENARIOS.length}: ${s.name} (${s.paper})\n${'='.repeat(60)}\n`)
+
+      try {
+        // Apply scenario config
+        await applyScenario(s)
+
+        // Wait for apply to settle
+        await new Promise(r => setTimeout(r, 1000))
+
+        // Generate trace from current params
+        const traceName = `debug_${s.id}`
+        const resolvedTrace = traceName
+
+        // Run experiment via API with timeout
+        const ws = createWebSocket('/api/experiment/ws/output')
+        wsRef.current = ws
+
+        await new Promise<void>((resolve, reject) => {
+          let resolved = false
+          const done = () => { if (!resolved) { resolved = true; resolve() } }
+          // 3-minute timeout per scenario to prevent infinite hang
+          const timeout = setTimeout(() => {
+            appendLog('server', '\n[Batch] Timeout — moving to next scenario.\n')
+            ws.close()
+            done()
+          }, 180000)
+
+          ws.onmessage = (event) => {
+            try {
+              const msg = JSON.parse(event.data)
+              if (msg.source && msg.text) appendLog(msg.source, msg.text)
+              if (msg.type === 'done') {
+                setStatus({
+                  running: false,
+                  output_dir: msg.output_dir ?? `${s.outputDirPattern}/output_1`,
+                  data_name: msg.data_name ?? filePath.replace(/^.*[\\/]/, '').replace(/\.yuv$/, ''),
+                })
+                clearTimeout(timeout)
+                done()
+              }
+            } catch {
+              appendLog('server', event.data)
+            }
+          }
+          ws.onerror = () => { clearTimeout(timeout); done() }
+          ws.onclose = () => { clearTimeout(timeout); done() }
+
+          ws.onopen = () => {
+            runExperiment({
+              file_path: filePath,
+              width,
+              height,
+              fps: s.experimentConfig.fps || fps,
+              output_dir: `${s.outputDirPattern}/output_1`,
+              enable_mahimahi: s.experimentConfig.enable_mahimahi ?? true,
+              trace_file: resolvedTrace,
+              enable_loss_trace: s.experimentConfig.enable_loss_trace ?? false,
+              delay_ms: 0,
+              server_ip: serverIp,
+              port,
+              field_trials: s.experimentConfig.field_trials || '',
+            }).catch(() => { clearTimeout(timeout); done() })
+          }
+        })
+
+        // Close WebSocket cleanly before next scenario
+        try { ws.close() } catch {}
+
+        updateBatchResult(s.id, 'done')
+        appendLog('server', `\n[Batch] Scenario ${i + 1} completed: ${s.name}\n`)
+      } catch (err) {
+        updateBatchResult(s.id, 'error')
+        appendLog('server', `\n[Batch] Scenario ${i + 1} FAILED: ${s.name} — ${err}\n`)
+      }
+
+      // Pause between scenarios for cleanup (kill leftover processes)
+      try { await api('/api/experiment/stop', { method: 'POST' }) } catch {}
+      await new Promise(r => setTimeout(r, 3000))
+    }
+
+    setBatchRunning(false)
+    setBatchCurrentIdx(-1)
+    appendLog('server', `\n${'='.repeat(60)}\n[Batch] All scenarios completed.\n${'='.repeat(60)}\n`)
+  }, [filePath, width, height, fps, serverIp, port])
+
+  const handleStopBatch = () => {
+    batchAbortRef.current = true
+    handleStop()
+    setBatchRunning(false)
+    setBatchCurrentIdx(-1)
+  }
+
   // Auto-scroll log
   useEffect(() => {
     if (logRef.current) {
@@ -318,32 +438,77 @@ export default function Experiment() {
   return (
     <div className="h-full flex flex-col">
       <div className="mb-3">
-        <h2 className="text-2xl font-bold text-white">Experiment</h2>
-        <p className="text-sm text-slate-400 mt-1">Configure and run WebRTC streaming experiments</p>
+        <h2 className="text-2xl font-bold text-[#f4f4f4]">Experiment</h2>
+        <p className="text-sm text-[#c6c6c6] mt-1">Configure and run WebRTC streaming experiments</p>
       </div>
 
       {/* Debug Mode: Controlled Experiment Scenarios */}
       {debugMode && (
-        <div className="bg-surface-secondary border border-slate-700 rounded-xl p-3 mb-3">
-          <h3 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5 mb-2">
-            <FlaskConical size={12} /> Controlled Experiment Scenarios (Profix Paper Dataset)
-          </h3>
-          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-1.5">
-            {SCENARIOS.map(s => (
-              <div key={s.id} className="relative">
-                <button
-                  onClick={() => { const next = expandedScenario === s.id ? null : s.id; setExpandedScenario(next); if (next) loadScenarioDefaults(s.id) }}
-                  className={`w-full text-left px-2 py-1.5 rounded-lg text-[10px] border transition-colors ${
-                    expandedScenario === s.id
-                      ? 'bg-accent/20 border-accent/50 text-white'
-                      : 'bg-surface border-slate-600 text-slate-300 hover:bg-surface-tertiary'
-                  }`}
-                >
-                  <span className="font-medium block truncate">{s.name}</span>
-                  <span className="text-[9px] text-slate-500 block truncate">{s.paper}</span>
-                </button>
+        <div className="bg-surface-secondary border border-[#393939] rounded-none p-3 mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-[#c6c6c6] flex items-center gap-1.5">
+              <FlaskConical size={12} /> Controlled Experiment Scenarios
+            </h3>
+            {!batchRunning ? (
+              <button
+                onClick={handleRunAll}
+                disabled={status.running || !filePath}
+                className="px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:opacity-50 text-[#f4f4f4] text-[10px] font-medium flex items-center gap-1.5"
+              >
+                <PlayCircle size={12} /> Run All 7 Scenarios
+              </button>
+            ) : (
+              <button
+                onClick={handleStopBatch}
+                className="px-3 py-1.5 bg-danger hover:bg-red-700 text-[#f4f4f4] text-[10px] font-medium flex items-center gap-1.5"
+              >
+                <Square size={12} /> Stop Batch
+              </button>
+            )}
+          </div>
+
+          {/* Batch progress warning */}
+          {batchRunning && (
+            <div className="bg-[#262626] border border-warning/30 p-2 mb-2 flex items-start gap-2">
+              <Loader2 size={14} className="text-warning animate-spin shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] text-warning font-medium">
+                  Running scenario {batchCurrentIdx + 1}/7: {SCENARIOS[batchCurrentIdx]?.name}
+                </p>
+                <p className="text-[9px] text-[#c6c6c6] mt-0.5">
+                  This will take approximately 10–15 minutes for all 7 scenarios. Do not close the application.
+                </p>
               </div>
-            ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-1.5">
+            {SCENARIOS.map(s => {
+              const batchState = batchResults[s.id]
+              return (
+                <div key={s.id} className="relative">
+                  <button
+                    onClick={() => { const next = expandedScenario === s.id ? null : s.id; setExpandedScenario(next); if (next) loadScenarioDefaults(s.id) }}
+                    className={`w-full text-left px-2 py-1.5 rounded-none text-[10px] border transition-colors ${
+                      expandedScenario === s.id
+                        ? 'bg-accent/20 border-accent/50 text-[#f4f4f4]'
+                        : batchState === 'done' ? 'bg-success/10 border-success/30 text-[#f4f4f4]'
+                        : batchState === 'running' ? 'bg-accent/10 border-accent/30 text-[#f4f4f4]'
+                        : batchState === 'error' ? 'bg-danger/10 border-danger/30 text-[#f4f4f4]'
+                        : 'bg-surface border-[#393939] text-[#c6c6c6] hover:bg-surface-tertiary'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1">
+                      {batchState === 'done' && <CheckCircle2 size={10} className="text-success shrink-0" />}
+                      {batchState === 'running' && <Loader2 size={10} className="text-accent animate-spin shrink-0" />}
+                      {batchState === 'error' && <XCircle size={10} className="text-danger shrink-0" />}
+                      <span className="font-medium truncate">{s.name}</span>
+                    </div>
+                    <span className="text-[9px] text-[#6f6f6f] block truncate">{s.paper}</span>
+                  </button>
+                </div>
+              )
+            })}
           </div>
 
           {/* Expanded scenario detail */}
@@ -351,16 +516,16 @@ export default function Experiment() {
             const s = SCENARIOS.find(sc => sc.id === expandedScenario)
             if (!s) return null
             return (
-              <div className="mt-2 border border-slate-600 rounded-lg p-3 bg-surface">
+              <div className="mt-2 border border-[#393939] rounded-none p-3 bg-surface">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-semibold text-white">{s.name} — {s.paper}</h4>
-                    <p className="text-[10px] text-slate-400 mt-1">{s.description}</p>
+                    <h4 className="text-xs font-semibold text-[#f4f4f4]">{s.name} — {s.paper}</h4>
+                    <p className="text-[10px] text-[#c6c6c6] mt-1">{s.description}</p>
                   </div>
                   <button
                     onClick={() => applyScenario(s)}
                     disabled={status.running || !filePath}
-                    className="shrink-0 px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg text-[10px] font-medium flex items-center gap-1"
+                    className="shrink-0 px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:opacity-50 text-[#f4f4f4] rounded-none text-[10px] font-medium flex items-center gap-1"
                   >
                     <Play size={10} /> Apply Config
                   </button>
@@ -394,11 +559,11 @@ export default function Experiment() {
                   </div>
                 </div>
                 {/* Paper reference values */}
-                <p className="text-[9px] text-slate-500 mt-1.5 italic">{s.networkSetup.summary}</p>
+                <p className="text-[9px] text-[#6f6f6f] mt-1.5 italic">{s.networkSetup.summary}</p>
 
                 {/* Expected Anomalies */}
                 <div className="mt-2">
-                  <span className="text-[9px] text-slate-500 font-medium">Expected Anomalies:</span>
+                  <span className="text-[9px] text-[#6f6f6f] font-medium">Expected Anomalies:</span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {s.expectedAnomalies.map((a, i) => (
                       <span
@@ -426,14 +591,14 @@ export default function Experiment() {
 
           {/* Video */}
           <section className={sectionCls}>
-            <h3 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5"><Film size={12} /> Video</h3>
+            <h3 className="text-xs font-semibold text-[#c6c6c6] flex items-center gap-1.5"><Film size={12} /> Video</h3>
             <div>
               <label className={labelCls}>YUV File</label>
               <div className="flex gap-1.5">
                 <input type="text" value={filePath} readOnly placeholder="Select YUV..."
                   className={`flex-1 ${inputCls}`} />
-                <button onClick={handleSelectFile} className="p-1.5 bg-surface-tertiary hover:bg-slate-600 rounded-lg">
-                  <FolderOpen size={12} className="text-slate-300" />
+                <button onClick={handleSelectFile} className="p-1.5 bg-surface-tertiary hover:bg-[#525252] rounded-none">
+                  <FolderOpen size={12} className="text-[#c6c6c6]" />
                 </button>
               </div>
             </div>
@@ -455,9 +620,9 @@ export default function Experiment() {
 
           {/* Network */}
           <section className={sectionCls}>
-            <h3 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5"><Network size={12} /> Network Emulation</h3>
+            <h3 className="text-xs font-semibold text-[#c6c6c6] flex items-center gap-1.5"><Network size={12} /> Network Emulation</h3>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-400">Enable Network Emulation</span>
+              <span className="text-[10px] text-[#c6c6c6]">Enable Network Emulation</span>
               <Toggle checked={enableMahimahi} onChange={setEnableMahimahi} />
             </div>
             {enableMahimahi && (
@@ -479,13 +644,13 @@ export default function Experiment() {
                       className={inputCls} step="1" min="0" max="100" />
                   </div>
                 </div>
-                <p className="text-[9px] text-slate-500">
+                <p className="text-[9px] text-[#6f6f6f]">
                   A constant-bandwidth trace is auto-generated on run. Set latency for base one-way delay (mm-delay).
                 </p>
 
                 {/* Advanced: custom trace file */}
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400">Use Custom Trace File</span>
+                  <span className="text-[10px] text-[#c6c6c6]">Use Custom Trace File</span>
                   <button
                     onClick={() => setShowAdvancedTrace(!showAdvancedTrace)}
                     className="text-[9px] text-accent hover:underline"
@@ -494,7 +659,7 @@ export default function Experiment() {
                   </button>
                 </div>
                 {showAdvancedTrace && (
-                  <div className="border border-slate-600 rounded-lg p-2 space-y-1.5 bg-surface">
+                  <div className="border border-[#393939] rounded-none p-2 space-y-1.5 bg-surface">
                     <div>
                       <label className={labelCls}>Trace File (overrides bandwidth)</label>
                       <select
@@ -516,10 +681,10 @@ export default function Experiment() {
                       />
                       <button
                         onClick={() => { setShowCreateTrace(!showCreateTrace); if (!newTraceContent) setNewTraceContent(SAMPLE_TRACE) }}
-                        className="p-1.5 bg-surface-tertiary hover:bg-slate-600 rounded-lg"
+                        className="p-1.5 bg-surface-tertiary hover:bg-[#525252] rounded-none"
                         title="Edit raw trace"
                       >
-                        {showCreateTrace ? <X size={12} className="text-slate-300" /> : <Plus size={12} className="text-slate-300" />}
+                        {showCreateTrace ? <X size={12} className="text-[#c6c6c6]" /> : <Plus size={12} className="text-[#c6c6c6]" />}
                       </button>
                     </div>
                     {showCreateTrace && (
@@ -533,7 +698,7 @@ export default function Experiment() {
                         <button
                           onClick={handleCreateTrace}
                           disabled={!newTraceName.trim() || !newTraceContent.trim()}
-                          className="w-full px-2 py-1 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded text-[10px] font-medium"
+                          className="w-full px-2 py-1 bg-accent hover:bg-accent-hover disabled:opacity-50 text-[#f4f4f4] rounded text-[10px] font-medium"
                         >
                           Save Trace File
                         </button>
@@ -547,7 +712,7 @@ export default function Experiment() {
 
           {/* Server */}
           <section className={sectionCls}>
-            <h3 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5"><Server size={12} /> Server</h3>
+            <h3 className="text-xs font-semibold text-[#c6c6c6] flex items-center gap-1.5"><Server size={12} /> Server</h3>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className={labelCls}>IP Address</label>
@@ -562,7 +727,7 @@ export default function Experiment() {
 
           {/* Advanced */}
           <section className={sectionCls}>
-            <h3 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5"><Settings size={12} /> Advanced</h3>
+            <h3 className="text-xs font-semibold text-[#c6c6c6] flex items-center gap-1.5"><Settings size={12} /> Advanced</h3>
             <div>
               <label className={labelCls}>Output Directory</label>
               <input type="text" value={outputDir} onChange={(e) => setOutputDir(e.target.value)}
@@ -586,21 +751,21 @@ export default function Experiment() {
               <button
                 onClick={handleRun}
                 disabled={!filePath}
-                className="flex-1 px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-[#f4f4f4] rounded-none text-sm font-medium flex items-center justify-center gap-2"
               >
                 <Play size={14} /> Run Experiment
               </button>
             ) : (
               <button
                 onClick={handleStop}
-                className="flex-1 px-4 py-2 bg-danger hover:bg-red-600 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 bg-danger hover:bg-red-600 text-[#f4f4f4] rounded-none text-sm font-medium flex items-center justify-center gap-2"
               >
                 <Square size={14} /> Stop
               </button>
             )}
             <button
               onClick={clearLogs}
-              className="px-4 py-2 bg-surface-tertiary hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-medium flex items-center gap-2"
+              className="px-4 py-2 bg-surface-tertiary hover:bg-[#525252] text-[#f4f4f4] rounded-none text-sm font-medium flex items-center gap-2"
             >
               <RefreshCw size={14} />
             </button>
@@ -608,8 +773,8 @@ export default function Experiment() {
         </div>
 
         {/* Right: Log Terminal */}
-        <div className="flex-1 min-h-0 bg-surface-secondary border border-slate-700 rounded-xl overflow-hidden flex flex-col">
-          <div className="flex border-b border-slate-700">
+        <div className="flex-1 min-h-0 bg-surface-secondary border border-[#393939] rounded-none overflow-hidden flex flex-col">
+          <div className="flex border-b border-[#393939]">
             {tabs.map((tab) => (
               <button
                 key={tab}
@@ -617,7 +782,7 @@ export default function Experiment() {
                 className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors ${
                   activeTab === tab
                     ? 'text-accent border-b-2 border-accent bg-surface/50'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : 'text-[#c6c6c6] hover:text-[#f4f4f4]'
                 }`}
               >
                 {tab}
@@ -626,7 +791,7 @@ export default function Experiment() {
           </div>
           <pre
             ref={logRef}
-            className="flex-1 overflow-auto p-4 text-xs font-mono text-slate-300 leading-relaxed whitespace-pre-wrap"
+            className="flex-1 overflow-auto p-4 text-xs font-mono text-[#c6c6c6] leading-relaxed whitespace-pre-wrap"
           >
             {logs[activeTab] || 'Waiting for output...'}
           </pre>

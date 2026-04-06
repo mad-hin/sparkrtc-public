@@ -2,83 +2,160 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── IBM Carbon Design System tokens (Gray 100 dark theme) ── */
+:root {
+  --cds-background: #161616;
+  --cds-layer-01: #262626;
+  --cds-layer-02: #393939;
+  --cds-field: #262626;
+  --cds-text-primary: #f4f4f4;
+  --cds-text-secondary: #c6c6c6;
+  --cds-text-placeholder: #6f6f6f;
+  --cds-text-on-color: #ffffff;
+  --cds-border-subtle: #393939;
+  --cds-border-strong: #6f6f6f;
+  --cds-link-primary: #78a9ff;
+  --cds-link-primary-hover: #a6c8ff;
+  --cds-focus: #0f62fe;
+  --cds-button-primary: #0f62fe;
+  --cds-button-primary-hover: #0353e9;
+  --cds-button-primary-active: #002d9c;
+  --cds-button-secondary: #6f6f6f;
+  --cds-button-secondary-hover: #606060;
+  --cds-support-error: #fa4d56;
+  --cds-support-success: #42be65;
+  --cds-support-warning: #f1c21b;
+  --cds-support-info: #4589ff;
+}
+
 @layer base {
+  /* IBM Carbon scrollbar */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   ::-webkit-scrollbar-track {
-    background: #1e293b;
+    background: #262626;
   }
   ::-webkit-scrollbar-thumb {
-    background: #475569;
-    border-radius: 4px;
+    background: #525252;
+    border-radius: 0px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
+    background: #6f6f6f;
+  }
+
+  /* Carbon base: 0px border-radius on all interactive elements */
+  button, input, select, textarea {
+    border-radius: 0px;
+  }
+
+  /* Carbon input: bottom-border style */
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  select,
+  textarea {
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    border-bottom: 2px solid transparent;
+    transition: border-color 150ms ease;
+  }
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  input[type="password"]:focus,
+  select:focus,
+  textarea:focus {
+    border-bottom-color: var(--cds-focus);
+    outline: none;
   }
 }
 
-/* highlight.js theme override for dark mode */
+/* ── highlight.js Carbon override ── */
 .hljs {
-  background: #1e293b !important;
-  border-radius: 0.5rem;
+  background: #262626 !important;
+  border-radius: 0px;
   padding: 1rem !important;
+  font-family: 'IBM Plex Mono', monospace;
 }
 
-/* Improve markdown readability in prose sections */
+/* ── Markdown prose: Carbon typography ── */
 .prose {
-  line-height: 1.8;
+  line-height: 1.5;
+  color: var(--cds-text-primary);
+  font-family: 'IBM Plex Sans', sans-serif;
 }
 .prose h1, .prose h2, .prose h3 {
-  margin-top: 1.8em;
-  margin-bottom: 0.8em;
-  padding-bottom: 0.3em;
-  border-bottom: 1px solid #334155;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--cds-border-subtle);
+  font-weight: 400;
 }
-.prose h1 { font-size: 1.5em; }
-.prose h2 { font-size: 1.25em; }
-.prose h3 { font-size: 1.1em; border-bottom: none; }
+.prose h1 { font-size: 1.5rem; }
+.prose h2 { font-size: 1.25rem; }
+.prose h3 { font-size: 1.1rem; border-bottom: none; }
 .prose p {
-  margin-top: 0.8em;
-  margin-bottom: 0.8em;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
 }
 .prose ul, .prose ol {
-  margin-top: 0.6em;
-  margin-bottom: 0.6em;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
   padding-left: 1.5em;
 }
 .prose li {
-  margin-top: 0.4em;
-  margin-bottom: 0.4em;
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
 }
 .prose li > p {
-  margin-top: 0.3em;
-  margin-bottom: 0.3em;
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
 }
 .prose strong {
-  color: #e2e8f0;
+  color: var(--cds-text-primary);
+  font-weight: 600;
 }
 .prose blockquote {
-  border-left: 3px solid #3b82f6;
+  border-left: 3px solid var(--cds-focus);
   padding-left: 1em;
   margin: 1em 0;
-  color: #94a3b8;
+  color: var(--cds-text-secondary);
 }
 .prose code:not(pre code) {
-  background: #1e293b;
-  padding: 0.15em 0.4em;
-  border-radius: 0.25em;
+  background: var(--cds-layer-01);
+  padding: 0.1em 0.35em;
+  border-radius: 0px;
   font-size: 0.85em;
-  color: #e2e8f0;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--cds-text-primary);
 }
 .prose pre {
   margin: 1em 0;
+  border-radius: 0px;
 }
 .prose hr {
-  border-color: #334155;
+  border-color: var(--cds-border-subtle);
   margin: 1.5em 0;
 }
 .prose > *:first-child {
   margin-top: 0;
+}
+.prose a {
+  color: var(--cds-link-primary);
+  text-decoration: none;
+}
+.prose a:hover {
+  color: var(--cds-link-primary-hover);
+  text-decoration: underline;
+}
+
+/* ── Carbon component utilities ── */
+@layer utilities {
+  /* Carbon focus ring: 2px Blue 60 inset + 1px white inner */
+  .cds-focus {
+    outline: 2px solid var(--cds-focus);
+    outline-offset: -2px;
+  }
 }

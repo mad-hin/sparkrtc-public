@@ -61,32 +61,32 @@ export default function ModelSelector({ value, onChange, models, className = '' 
       {/* Trigger button */}
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 bg-surface border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 min-w-[280px] hover:border-slate-500 transition-colors"
+        className="flex items-center gap-2 bg-surface border border-[#393939] rounded-none px-3 py-2 text-sm text-[#f4f4f4] min-w-[280px] hover:border-[#525252] transition-colors"
       >
         <span className="flex-1 text-left truncate">
           {selected ? selected.name : value || 'Select a model...'}
         </span>
         {selected && (
-          <span className="text-[10px] font-mono text-slate-500 shrink-0">
+          <span className="text-[10px] font-mono text-[#6f6f6f] shrink-0">
             {ctxLabel(selected.context_length)}
           </span>
         )}
-        <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`text-[#c6c6c6] transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[350px] bg-surface-secondary border border-slate-600 rounded-lg shadow-xl overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full min-w-[350px] bg-surface-secondary border border-[#393939] rounded-none shadow-xl overflow-hidden">
           {/* Search input */}
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700">
-            <Search size={14} className="text-slate-500 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-[#393939]">
+            <Search size={14} className="text-[#6f6f6f] shrink-0" />
             <input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search models..."
-              className="flex-1 bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none"
+              className="flex-1 bg-transparent text-sm text-[#f4f4f4] placeholder-[#6f6f6f] outline-none"
             />
           </div>
 
@@ -100,17 +100,17 @@ export default function ModelSelector({ value, onChange, models, className = '' 
                   className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm transition-colors ${
                     m.id === value
                       ? 'bg-accent/15 text-accent'
-                      : 'text-slate-300 hover:bg-surface-tertiary/50'
+                      : 'text-[#c6c6c6] hover:bg-surface-tertiary/50'
                   }`}
                 >
                   <span className="truncate">{m.name}</span>
-                  <span className="text-[10px] font-mono text-slate-500 shrink-0 ml-2">
+                  <span className="text-[10px] font-mono text-[#6f6f6f] shrink-0 ml-2">
                     {ctxLabel(m.context_length)} ctx
                   </span>
                 </button>
               ))
             ) : (
-              <div className="px-3 py-4 text-xs text-slate-500 text-center">
+              <div className="px-3 py-4 text-xs text-[#6f6f6f] text-center">
                 No models match "{search}"
               </div>
             )}
