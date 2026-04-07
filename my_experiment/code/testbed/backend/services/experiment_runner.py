@@ -17,6 +17,7 @@ class ExperimentRunner:
         self._data_name: Optional[str] = None
         self._ws_clients: list[WebSocket] = []
         self._task: Optional[asyncio.Task] = None
+        self._last_request: Optional[ExperimentRequest] = None  # remember last config
 
     def add_ws(self, ws: WebSocket):
         self._ws_clients.append(ws)
@@ -43,6 +44,7 @@ class ExperimentRunner:
 
     async def start(self, req: ExperimentRequest):
         self._running = True
+        self._last_request = req  # remember full config for start_simple reuse
 
         repo_root = get_repo_path()
         result_base = os.path.join(repo_root, "my_experiment", "result")
@@ -61,7 +63,7 @@ class ExperimentRunner:
             rel_output_dir = raw
 
         if not rel_output_dir or "/" not in rel_output_dir:
-            rel_output_dir = "default_run/output_1"
+            rel_output_dir = "custom/output_1"
 
         # Store absolute path so all downstream consumers get a stable reference
         self._output_dir = os.path.join(result_base, rel_output_dir)
@@ -225,9 +227,21 @@ class ExperimentRunner:
         import argparse
 
         code_dir = os.path.join(get_repo_path(), "my_experiment", "code")
+        # Reuse the last experiment's full config (file path, resolution, network, etc.)
+        prev = self._last_request
         cfg = argparse.Namespace(
             data=data_name,
             output_dir=compare_dir,
+            width=prev.width if prev else 1920,
+            height=prev.height if prev else 1080,
+            fps=prev.fps if prev else 24,
+            server_ip=prev.server_ip if prev else '127.0.0.1',
+            port=prev.port if prev else 8888,
+            enable_mahimahi=prev.enable_mahimahi if prev else False,
+            trace_file=prev.trace_file if prev else '',
+            enable_loss_trace=prev.enable_loss_trace if prev else False,
+            delay_ms=prev.delay_ms if prev else 0,
+            field_trials=prev.field_trials if prev else '',
         )
 
         def _run_in_code_dir():

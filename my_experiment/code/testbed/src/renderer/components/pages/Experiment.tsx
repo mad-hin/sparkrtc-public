@@ -47,7 +47,7 @@ export default function Experiment() {
   const [port, setPort] = useState(8888)
   // Advanced
   const [fieldTrials, setFieldTrials] = useState('')
-  const [outputDir, setOutputDir] = useState(status.output_dir || 'default_run/output_1')
+  const [outputDir, setOutputDir] = useState('custom/output_1')
   const [showAdvancedTrace, setShowAdvancedTrace] = useState(false)
 
   // Create trace form
@@ -731,7 +731,7 @@ export default function Experiment() {
             <div>
               <label className={labelCls}>Output Directory</label>
               <input type="text" value={outputDir} onChange={(e) => setOutputDir(e.target.value)}
-                placeholder="trace/output_1" className={inputCls} />
+                placeholder="custom/output_1" className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>WebRTC Field Trials</label>

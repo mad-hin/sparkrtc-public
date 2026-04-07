@@ -578,15 +578,19 @@ def send_and_recv_video(cfg):
         kill_process(screenshot_process)
     kill_process(server_process)
 
-    ssim, psnr, delay, drop_frames_index = decode_recv_video(cfg)
-    # ssim, psnr, delay, drop_frames_index = decode_recv_video(cfg)
-    ssim = np.array(ssim)
-    delay = np.array(delay)
-    psnr = np.array(psnr)
+    try:
+        ssim, psnr, delay, drop_frames_index = decode_recv_video(cfg)
+    except Exception as e:
+        print(f"Warning: decode_recv_video failed: {e}")
+        ssim, psnr, delay, drop_frames_index = [], [], [], []
 
-    avg_ssim = np.mean(ssim)
-    avg_delay = np.mean(delay)
-    avg_psnr = np.mean(psnr)
+    ssim = np.array(ssim, dtype=float) if ssim else np.array([])
+    delay = np.array(delay, dtype=float) if delay else np.array([])
+    psnr = np.array(psnr, dtype=float) if psnr else np.array([])
+
+    avg_ssim = np.mean(ssim) if len(ssim) > 0 else 0
+    avg_delay = np.mean(delay) if len(delay) > 0 else 0
+    avg_psnr = np.mean(psnr) if len(psnr) > 0 else 0
 
     print(f"ssim: {avg_ssim} psnr: {avg_psnr} delay: {avg_delay}")
     f_res_overal_file.write("------------------- " + str(cfg.output_dir) + " ---------------------------" + "\n")
