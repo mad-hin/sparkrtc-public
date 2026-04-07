@@ -54,15 +54,20 @@ async def apply_patches(req: ApplyPatchesRequest):
     results = {"success": True, "branch": branch, "applied": [], "failed": []}
 
     for patch in req.patches:
+        import logging
+        logging.info(f"Applying patch: file={patch.file}, diff_len={len(patch.diff)}")
         ok = git_svc.apply_patch(patch.file, patch.diff)
         if ok:
             results["applied"].append(patch.file)
         else:
             results["failed"].append(patch.file)
             results["success"] = False
+            logging.warning(f"Failed to apply patch to {patch.file}")
 
     if results["applied"]:
         git_svc.commit("Agent: apply suggested changes")
+    else:
+        logging.warning("No patches were applied successfully")
 
     return results
 

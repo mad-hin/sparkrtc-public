@@ -351,7 +351,7 @@ def calc_delay_framesize_rate(recv_dir, res_dir):
     rate_time, rate, frame_size_time, frame_size = extract_rate_and_framesize(recv_dir)
     if not rate_time or not frame_size_time or not time_stamp_end:
         print("Warning: empty rate/frame_size/timestamp data — skipping delay/rate calculation")
-        return [], [], 0, []
+        return []
     start_time = min(rate_time[0], frame_size_time[0], time_stamp_end[0])
     rate_time = [x - start_time for x in rate_time]
     frame_size_time = [x - start_time for x in frame_size_time]
@@ -562,16 +562,44 @@ def send_and_recv_video(cfg):
         screenshot_process = -1
         server_process = mm_process  # same process group
     else:
-        server_process = start_process(server_command)
+        # Even without explicit network emulation, wrap in MahiMahi with a
+        # high-bandwidth trace to ensure both peers are in the same network
+        # namespace (loopback). Without this, ICE candidates use real IPs
+        # from multiple interfaces which causes unreliable connections.
+        default_trace = "../file/trace_logs/auto_100mbps.log"
+        if not os.path.exists(default_trace):
+            # Generate a 100Mbps trace (1 packet every 0.12ms)
+            with open(default_trace, 'w') as f:
+                t = 1.0
+                while t <= 60000:
+                    f.write(str(round(t)) + "\n")
+                    t += 0.12
+
+        mahimahi_command = mahimahi_path + "mm-link " + default_trace + " " + default_trace
+        mm_process = start_process(mahimahi_command)
+        time.sleep(0.5)
+
+        mm_process.stdin.write(server_command.encode())
+        mm_process.stdin.flush()
         time.sleep(1)
 
-        recv_process, screenshot_process = run_receive_process(
-            client_bin, recv_file, server_ip, port, recv_dir, trace_file,
-            enable_mahimahi=False, enable_loss_trace=False,
-            field_trials=field_trials, delay_ms=0)
+        ft_flag = (" --force_fieldtrials " + field_trials) if field_trials else ""
+        recv_command = (client_bin + " --recon " + recv_file +
+                       " --server " + server_ip + " --port " + port +
+                       ft_flag + " > " + recv_dir + "recv.log 2>&1 &\n")
+        mm_process.stdin.write(recv_command.encode())
+        mm_process.stdin.flush()
+        time.sleep(2)
 
-        send_process = start_process(send_command, send_log_file)
-        send_process.wait()
+        send_fg_command = (send_command + " > " + send_log_file + " 2>&1;"
+                          " pkill -P $$ 2>/dev/null; exit 0\n")
+        mm_process.stdin.write(send_fg_command.encode())
+        mm_process.stdin.flush()
+        mm_process.wait()
+
+        recv_process = mm_process
+        screenshot_process = -1
+        server_process = mm_process
 
     kill_process(recv_process)
     if screenshot_process != -1:

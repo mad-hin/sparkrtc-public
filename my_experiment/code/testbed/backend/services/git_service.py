@@ -56,6 +56,25 @@ class GitService:
 
     def apply_patch(self, file_path: str, diff_content: str) -> bool:
         """Apply a unified diff to a file. Returns True on success."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Ensure the diff has proper git headers
+        # LLM may produce diffs without a/ b/ prefixes
+        lines = diff_content.split("\n")
+        fixed_lines = []
+        for line in lines:
+            if line.startswith("--- ") and not line.startswith("--- a/") and not line.startswith("--- /dev/null"):
+                fixed_lines.append(f"--- a/{line[4:]}")
+            elif line.startswith("+++ ") and not line.startswith("+++ b/") and not line.startswith("+++ /dev/null"):
+                fixed_lines.append(f"+++ b/{line[4:]}")
+            else:
+                fixed_lines.append(line)
+        diff_content = "\n".join(fixed_lines)
+
+        logger.info(f"Applying patch to {file_path}, diff length={len(diff_content)}")
+        logger.info(f"Diff first 200 chars: {diff_content[:200]}")
+
         # Write diff to temp file
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".patch", delete=False
@@ -66,14 +85,20 @@ class GitService:
         # Validate first
         result = self._run("apply", "--check", patch_file, check=False)
         if result.returncode != 0:
+            logger.warning(f"git apply --check failed: {result.stderr}")
             # Try with --3way for fuzzy matching
             result = self._run("apply", "--3way", patch_file, check=False)
             if result.returncode != 0:
+                logger.warning(f"git apply --3way failed: {result.stderr}")
                 # Last resort: try directly writing the file
-                return self._fuzzy_apply(file_path, diff_content)
+                ok = self._fuzzy_apply(file_path, diff_content)
+                logger.info(f"Fuzzy apply result: {ok}")
+                Path(patch_file).unlink(missing_ok=True)
+                return ok
 
         # Apply for real
         result = self._run("apply", patch_file, check=False)
+        logger.info(f"git apply result: returncode={result.returncode}, stderr={result.stderr}")
         Path(patch_file).unlink(missing_ok=True)
         return result.returncode == 0
 
