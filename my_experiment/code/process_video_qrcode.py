@@ -490,6 +490,12 @@ def run_receive_process(client_bin, recv_file, server_ip, port, recv_dir, trace_
 def send_and_recv_video(cfg):
     root_dir = "../../"
     res_overall_dir = "../"
+    # Ensure output_dir always has at least 2 path components
+    # (trace_name/output_N). Code below uses words[0] and words[1].
+    raw = cfg.output_dir.strip('/')
+    if '/' not in raw:
+        raw = raw + '/output_1'
+    cfg.output_dir = raw
     words = cfg.output_dir.split('/')
 
     client_bin = root_dir + "out/Default/peerconnection_localvideo"

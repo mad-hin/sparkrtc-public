@@ -20,6 +20,23 @@ async def get_analysis_summary(req: AnalysisRequest):
 @router.websocket("/ws/stream")
 async def ws_analysis_stream(ws: WebSocket):
     await ws.accept()
+    cancelled = False
+
+    async def check_disconnect():
+        """Monitor for client disconnect in background."""
+        nonlocal cancelled
+        try:
+            while not cancelled:
+                # This will raise WebSocketDisconnect if client closes
+                await ws.receive_text()
+        except WebSocketDisconnect:
+            cancelled = True
+        except Exception:
+            cancelled = True
+
+    import asyncio
+    disconnect_task = asyncio.create_task(check_disconnect())
+
     try:
         data = await ws.receive_text()
         req = json.loads(data)
@@ -31,9 +48,19 @@ async def ws_analysis_stream(ws: WebSocket):
             model=req["model"],
             api_key=req["api_key"],
         ):
-            await ws.send_json({"chunk": chunk})
+            if cancelled:
+                logger.info("[analysis] Client disconnected, stopping stream")
+                break
+            try:
+                await ws.send_json({"chunk": chunk})
+            except Exception:
+                break
 
-        await ws.send_json({"done": True})
+        if not cancelled:
+            try:
+                await ws.send_json({"done": True})
+            except Exception:
+                pass
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -41,3 +68,6 @@ async def ws_analysis_stream(ws: WebSocket):
             await ws.send_json({"error": str(e)})
         except Exception:
             pass
+    finally:
+        cancelled = True
+        disconnect_task.cancel()

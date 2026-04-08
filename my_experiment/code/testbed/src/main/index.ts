@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, nativeImage, clipboard } from 'electron'
 import { join } from 'path'
 import { writeFileSync } from 'fs'
 import { PythonBridge } from './python-bridge'
@@ -71,9 +71,8 @@ ipcMain.handle('app:screenshot', async () => {
 // Screenshot: copy to clipboard
 ipcMain.handle('app:screenshotClipboard', async () => {
   if (!mainWindow) return false
-  const { clipboard } = await import('electron')
   const image = await mainWindow.webContents.capturePage()
-  clipboard.writeImage(nativeImage.createFromBuffer(image.toPNG()))
+  clipboard.writeImage(image)
   return true
 })
 

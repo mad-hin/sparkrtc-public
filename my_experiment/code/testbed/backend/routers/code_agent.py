@@ -84,11 +84,10 @@ async def ws_build(ws: WebSocket):
 
 @router.post("/run-experiment")
 async def run_agent_experiment(req: dict):
-    """Run experiment on temp branch and return compare dir."""
-    from services.experiment_runner import ExperimentRunner
+    """Run experiment on temp branch using the shared runner (so WebSocket clients get logs)."""
+    from routers.experiment import runner
 
-    runner = ExperimentRunner()
-    compare_dir = f"agent-{git_svc.current_branch}"
+    compare_dir = f"agent-{git_svc.current_branch}/output_1"
     await runner.start_simple(req.get("output_dir", ""), req.get("data_name", ""), compare_dir)
     return {"compare_dir": compare_dir}
 

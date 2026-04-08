@@ -234,8 +234,29 @@ export default function CodeAgent() {
     ws.onclose = () => store.setStreaming(false)
   }
 
+  const [experimentLogs, setExperimentLogs] = useState('')
+  const experimentWsRef = useRef<WebSocket | null>(null)
+  const experimentLogRef = useRef<HTMLPreElement>(null)
+
   const handleRunExperiment = async () => {
     store.setExperimentRunning(true)
+    setExperimentLogs('')
+
+    // Stream logs via the shared experiment WebSocket
+    const ws = createWebSocket('/api/experiment/ws/output')
+    experimentWsRef.current = ws
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg.source && msg.text) setExperimentLogs(prev => prev + msg.text)
+      } catch {
+        setExperimentLogs(prev => prev + event.data)
+      }
+    }
+    const scrollTimer = setInterval(() => {
+      if (experimentLogRef.current) experimentLogRef.current.scrollTop = experimentLogRef.current.scrollHeight
+    }, 300)
+
     try {
       const result = await api<{ compare_dir: string }>('/api/agent/run-experiment', {
         method: 'POST',
@@ -250,7 +271,15 @@ export default function CodeAgent() {
       setBuildOutput(`Experiment failed: ${err}`)
     } finally {
       store.setExperimentRunning(false)
+      clearInterval(scrollTimer)
+      try { ws.close() } catch {}
     }
+  }
+
+  const handleStopExperiment = async () => {
+    try { experimentWsRef.current?.close() } catch {}
+    try { await api('/api/experiment/stop', { method: 'POST' }) } catch {}
+    store.setExperimentRunning(false)
   }
 
   const acceptedCount = store.suggestions.filter((s) => s.accepted).length
@@ -355,8 +384,36 @@ export default function CodeAgent() {
               <Play size={16} /> Run Experiment
             </button>
           )}
+          {store.experimentRunning && (
+            <button
+              onClick={handleStopExperiment}
+              className="px-5 py-2 bg-danger hover:bg-red-700 text-[#f4f4f4] rounded-none text-sm font-medium flex items-center gap-2"
+            >
+              <Square size={16} /> Stop Experiment
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Experiment log panel — streams ffmpeg/decode/WebRTC output */}
+      {(store.experimentRunning || experimentLogs) && (
+        <div className="bg-surface-secondary border border-[#393939] mb-4">
+          <div className="px-4 py-2 border-b border-[#393939] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {store.experimentRunning && <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />}
+              <span className="text-xs font-medium text-[#c6c6c6]">
+                {store.experimentRunning ? 'Experiment Running...' : 'Experiment Complete'}
+              </span>
+            </div>
+            {!store.experimentRunning && experimentLogs && (
+              <button onClick={() => setExperimentLogs('')} className="text-[9px] text-[#6f6f6f] hover:text-[#c6c6c6]">Clear</button>
+            )}
+          </div>
+          <pre ref={experimentLogRef} className="overflow-auto p-3 text-[10px] font-mono text-[#c6c6c6] leading-relaxed whitespace-pre-wrap" style={{ maxHeight: '200px' }}>
+            {experimentLogs || 'Starting experiment...'}
+          </pre>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 min-h-0 flex gap-4 overflow-hidden">
