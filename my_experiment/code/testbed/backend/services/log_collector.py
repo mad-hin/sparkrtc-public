@@ -77,30 +77,36 @@ def load_comparison_data(baseline_dir: str, compare_dir: str) -> dict:
     """Load before/after metrics for comparison."""
     metrics = []
 
-    for name, filename, col, higher_is_better in [
-        ("Delay (ms)", "delay.log", 3, False),
-        ("SSIM", "ssim.log", 1, True),
-        ("PSNR (dB)", "psnr.log", 1, True),
+    for name, filename, subdir, col, higher_is_better in [
+        ("Delay (ms)", "delay.log", "", 3, False),
+        ("SSIM", "ssim.log", "ssim", 1, True),
+        ("PSNR (dB)", "psnr.log", "psnr", 1, True),
     ]:
-        # Try to find data_name from the directory
         base_res = RESULT_DIR / baseline_dir / "res"
         comp_res = RESULT_DIR / compare_dir / "res"
 
         base_vals = []
         comp_vals = []
 
-        # Find first data directory
-        for d in [base_res, comp_res]:
-            if d.exists():
-                for sub in d.iterdir():
-                    if sub.is_dir():
-                        log_path = sub / filename
-                        vals = _read_log_values(log_path, col)
-                        if d == base_res:
-                            base_vals = vals
-                        else:
-                            comp_vals = vals
-                        break
+        # Find first data_name directory and read the log file
+        for d, is_base in [(base_res, True), (comp_res, False)]:
+            if not d.exists():
+                continue
+            for data_dir in d.iterdir():
+                if not data_dir.is_dir():
+                    continue
+                # Log files live at: res/<data_name>/<subdir>/<filename>
+                # e.g., res/test/ssim/ssim.log or res/test/delay.log
+                if subdir:
+                    log_path = data_dir / subdir / filename
+                else:
+                    log_path = data_dir / filename
+                vals = _read_log_values(log_path, col)
+                if is_base:
+                    base_vals = vals
+                else:
+                    comp_vals = vals
+                break
 
         if base_vals and comp_vals:
             base_mean = sum(base_vals) / len(base_vals)
@@ -128,10 +134,10 @@ def load_comparison_charts(baseline_dir: str, compare_dir: str) -> list[dict]:
     """Load chart data for overlay comparison."""
     charts = []
 
-    for title, filename, col in [
-        ("Delay per Frame", "delay.log", 3),
-        ("SSIM per Frame", "ssim.log", 1),
-        ("PSNR per Frame", "psnr.log", 1),
+    for title, filename, subdir, col in [
+        ("Delay per Frame", "delay.log", "", 3),
+        ("SSIM per Frame", "ssim.log", "ssim", 1),
+        ("PSNR per Frame", "psnr.log", "psnr", 1),
     ]:
         base_res = RESULT_DIR / baseline_dir / "res"
         comp_res = RESULT_DIR / compare_dir / "res"
@@ -139,16 +145,22 @@ def load_comparison_charts(baseline_dir: str, compare_dir: str) -> list[dict]:
         base_vals = []
         comp_vals = []
 
-        for d in [base_res, comp_res]:
-            if d.exists():
-                for sub in d.iterdir():
-                    if sub.is_dir():
-                        vals = _read_log_values(sub / filename, col)
-                        if d == base_res:
-                            base_vals = vals
-                        else:
-                            comp_vals = vals
-                        break
+        for d, is_base in [(base_res, True), (comp_res, False)]:
+            if not d.exists():
+                continue
+            for data_dir in d.iterdir():
+                if not data_dir.is_dir():
+                    continue
+                if subdir:
+                    log_path = data_dir / subdir / filename
+                else:
+                    log_path = data_dir / filename
+                vals = _read_log_values(log_path, col)
+                if is_base:
+                    base_vals = vals
+                else:
+                    comp_vals = vals
+                break
 
         max_len = max(len(base_vals), len(comp_vals))
         data = []

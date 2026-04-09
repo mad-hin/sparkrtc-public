@@ -89,6 +89,13 @@ export default function Analysis() {
             text += msg.chunk
             appendBatchLiveText(msg.chunk)
           }
+          if (msg.error) {
+            text += `\n[LLM Error] ${msg.error}\n`
+            appendBatchLiveText(`\n[LLM Error] ${msg.error}\n`)
+            ws.close()
+            done()
+            return
+          }
           if (msg.done) { ws.close(); done() }
         } catch {
           text += event.data
@@ -141,6 +148,15 @@ export default function Analysis() {
         }
 
         const llmText = await analyzeScenario(outputDir, dataName)
+
+        // If LLM returned empty/near-empty response, mark as error
+        if (!llmText || llmText.trim().length < 20) {
+          updateBatchResult(i, {
+            status: 'error',
+            analysisText: llmText || '(empty response from LLM — try a different model)'
+          })
+          continue
+        }
 
         const details = s.expectedAnomalies.map(a => ({
           label: a.label,
@@ -221,6 +237,11 @@ export default function Analysis() {
       try {
         const msg = JSON.parse(event.data)
         if (msg.chunk) appendChunk(msg.chunk)
+        if (msg.error) {
+          appendChunk(`\n[LLM Error] ${msg.error}\n`)
+          setStreaming(false)
+          return
+        }
         if (msg.done) setStreaming(false)
       } catch {
         appendChunk(event.data)
