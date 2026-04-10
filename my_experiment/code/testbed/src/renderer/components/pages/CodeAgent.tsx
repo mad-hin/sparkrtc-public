@@ -12,6 +12,73 @@ import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
 
 const STEP_LABELS = ['Anomaly Analysis', 'Deep Dive', 'Code Changes']
 
+/** Memoized suggestion card — diff viewer only renders when expanded */
+const SuggestionCard = React.memo(function SuggestionCard({
+  suggestion, store, streaming
+}: {
+  suggestion: { id: string; file: string; description: string; oldCode: string; newCode: string; accepted: boolean }
+  store: any
+  streaming: boolean
+}) {
+  const [expanded, setExpanded] = useState(!streaming) // collapsed during streaming
+
+  return (
+    <div className={`bg-surface-secondary border rounded-none overflow-hidden ${
+      suggestion.accepted ? 'border-success/50' : 'border-[#393939]'
+    }`}>
+      <div
+        className="flex items-center justify-between px-4 py-3 border-b border-[#393939] bg-surface-tertiary/30 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-[#6f6f6f]">{expanded ? '▼' : '▶'}</span>
+          <div>
+            <span className="text-sm font-mono text-[#f4f4f4]">{suggestion.file}</span>
+            {suggestion.description && (
+              <p className="text-xs text-[#c6c6c6] mt-0.5">{suggestion.description}</p>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); store.toggleSuggestion(suggestion.id) }}
+          className={`px-3 py-1.5 rounded-none text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            suggestion.accepted
+              ? 'bg-success/20 text-success hover:bg-success/30'
+              : 'bg-surface-tertiary text-[#c6c6c6] hover:bg-[#525252]'
+          }`}
+        >
+          {suggestion.accepted ? <Check size={12} /> : <X size={12} />}
+          {suggestion.accepted ? 'Accepted' : 'Accept'}
+        </button>
+      </div>
+      {expanded && (
+        <div className="text-xs">
+          <ReactDiffViewer
+            oldValue={suggestion.oldCode}
+            newValue={suggestion.newCode}
+            splitView={false}
+            useDarkTheme={true}
+            compareMethod={DiffMethod.LINES}
+            styles={{
+              variables: {
+                dark: {
+                  diffViewerBackground: '#1e293b',
+                  addedBackground: '#064e3b33',
+                  removedBackground: '#7f1d1d33',
+                  addedColor: '#6ee7b7',
+                  removedColor: '#fca5a5',
+                  wordAddedBackground: '#064e3b66',
+                  wordRemovedBackground: '#7f1d1d66'
+                }
+              }
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
+})
+
 function StepIndicator({ currentStep, message }: { currentStep: number; message: string }) {
   return (
     <div className="bg-surface-secondary border border-[#393939] rounded-none p-3 mb-4">
@@ -515,56 +582,9 @@ export default function CodeAgent() {
             </div>
           )}
 
-          {/* Code suggestions */}
+          {/* Code suggestions — diff viewer is collapsible to prevent UI freeze */}
           {store.suggestions.map((suggestion) => (
-            <div
-              key={suggestion.id}
-              className={`bg-surface-secondary border rounded-none overflow-hidden ${
-                suggestion.accepted ? 'border-success/50' : 'border-[#393939]'
-              }`}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#393939] bg-surface-tertiary/30">
-                <div>
-                  <span className="text-sm font-mono text-[#f4f4f4]">{suggestion.file}</span>
-                  {suggestion.description && (
-                    <p className="text-xs text-[#c6c6c6] mt-0.5">{suggestion.description}</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => store.toggleSuggestion(suggestion.id)}
-                  className={`px-3 py-1.5 rounded-none text-xs font-medium flex items-center gap-1.5 transition-colors ${
-                    suggestion.accepted
-                      ? 'bg-success/20 text-success hover:bg-success/30'
-                      : 'bg-surface-tertiary text-[#c6c6c6] hover:bg-[#525252]'
-                  }`}
-                >
-                  {suggestion.accepted ? <Check size={12} /> : <X size={12} />}
-                  {suggestion.accepted ? 'Accepted' : 'Accept'}
-                </button>
-              </div>
-              <div className="text-xs">
-                <ReactDiffViewer
-                  oldValue={suggestion.oldCode}
-                  newValue={suggestion.newCode}
-                  splitView={false}
-                  useDarkTheme={true}
-                  compareMethod={DiffMethod.LINES}
-                  styles={{
-                    variables: {
-                      dark: {
-                        diffViewerBackground: '#1e293b',
-                        addedBackground: '#064e3b33',
-                        removedBackground: '#7f1d1d33',
-                        addedColor: '#6ee7b7',
-                        removedColor: '#fca5a5',
-                        wordAddedBackground: '#064e3b66',
-                        wordRemovedBackground: '#7f1d1d66'
-                      }
-                    }
-                  }}
-                />
-              </div>
-            </div>
+            <SuggestionCard key={suggestion.id} suggestion={suggestion} store={store} streaming={store.streaming} />
           ))}
 
           {/* Empty state */}
