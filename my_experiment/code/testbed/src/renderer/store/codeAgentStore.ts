@@ -81,7 +81,24 @@ export const useCodeAgentStore = create<CodeAgentState>((set) => ({
   appendAnalysis: (chunk) =>
     set((state) => ({ analysisMarkdown: state.analysisMarkdown + chunk })),
   addSuggestion: (suggestion) =>
-    set((state) => ({ suggestions: [...state.suggestions, suggestion] })),
+    set((state) => {
+      // Deduplicate by file path: if a suggestion for the same file already
+      // exists, replace it instead of appending. This handles the case where
+      // the LLM generates new fixes for build errors in files that already
+      // have a pending suggestion.
+      const existingIdx = state.suggestions.findIndex((s) => s.file === suggestion.file)
+      if (existingIdx !== -1) {
+        const existing = state.suggestions[existingIdx]
+        const updated = [...state.suggestions]
+        updated[existingIdx] = {
+          ...suggestion,
+          // Preserve acceptance state if the user already accepted it
+          accepted: existing.accepted,
+        }
+        return { suggestions: updated }
+      }
+      return { suggestions: [...state.suggestions, suggestion] }
+    }),
   toggleSuggestion: (id) =>
     set((state) => ({
       suggestions: state.suggestions.map((s) =>

@@ -189,6 +189,14 @@ function MarkdownSegment({ content }: { content: string }) {
               {children}
             </td>
           )
+        },
+        // Render strikethrough as red diff-style deletion instead of line-through
+        del({ children }) {
+          return (
+            <span className="bg-red-900/30 text-red-300 px-0.5 line-through decoration-red-500/50">
+              {children}
+            </span>
+          )
         }
       }}
     >
